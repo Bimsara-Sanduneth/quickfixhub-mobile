@@ -1,0 +1,1 @@
+-- Baseline migration. Feature migrations start at V2__.
