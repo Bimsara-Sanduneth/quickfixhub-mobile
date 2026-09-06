@@ -1,19 +1,26 @@
-import { Link, router } from 'expo-router';
+import { router } from 'expo-router';
+import { Eye, EyeOff, Lock } from 'lucide-react-native';
 import { useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { extractErrorMessage } from '@/api/errors';
 import { useAuth } from '@/auth/AuthContext';
-import { FormInput } from '@/components/form-input';
-import { PrimaryButton } from '@/components/primary-button';
+import { Button } from '@/components/ds/button';
+import { Divider } from '@/components/ds/divider';
+import { TextField } from '@/components/ds/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { MaxContentWidth, Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
 export default function LoginScreen() {
+  const insets = useSafeAreaInsets();
+  const theme = useTheme();
   const { login } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showForgotNote, setShowForgotNote] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -32,45 +39,88 @@ export default function LoginScreen() {
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedView style={styles.form}>
-        <ThemedText type="title" style={styles.title}>
-          Welcome back
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <ThemedText style={styles.wordmark}>QUICKFIXHUB</ThemedText>
+        <Pressable onPress={() => router.push('/(auth)/register')}>
+          <ThemedText style={[styles.registerLink, { color: theme.accent }]}>REGISTER</ThemedText>
+        </Pressable>
+      </View>
+      <Divider style={styles.headerDivider} />
+
+      <View style={styles.form}>
+        <ThemedText style={styles.title}>Welcome{'\n'}back.</ThemedText>
+        <ThemedText type="small" themeColor="textSecondary" style={styles.subtitle}>
+          Sign in to book and track your jobs.
         </ThemedText>
 
-        <FormInput
-          placeholder="Email"
+        <TextField
+          label="Email"
           autoCapitalize="none"
           autoComplete="email"
           keyboardType="email-address"
           value={email}
           onChangeText={setEmail}
+          style={styles.fieldGap}
         />
-        <FormInput
-          placeholder="Password"
-          secureTextEntry
+        <TextField
+          label="Password"
+          secureTextEntry={!showPassword}
           autoComplete="password"
           value={password}
           onChangeText={setPassword}
+          rightElement={
+            <Pressable onPress={() => setShowPassword((v) => !v)} hitSlop={8}>
+              {showPassword ? (
+                <EyeOff size={16} color={theme.neutral600} />
+              ) : (
+                <Eye size={16} color={theme.neutral600} />
+              )}
+            </Pressable>
+          }
         />
 
+        <Pressable onPress={() => setShowForgotNote(true)} style={styles.forgotRow}>
+          <ThemedText style={[styles.forgotText, { color: showForgotNote ? theme.textSecondary : theme.accent700 }]}>
+            {showForgotNote ? "Password reset isn't available yet — contact support." : 'Forgot password?'}
+          </ThemedText>
+        </Pressable>
+
         {error && (
-          <ThemedText type="small" style={styles.error}>
+          <ThemedText type="small" style={[styles.error, { color: theme.accent }]}>
             {error}
           </ThemedText>
         )}
 
-        <PrimaryButton
-          label="Log in"
+        <Button
+          label="Sign in"
           loading={submitting}
           disabled={!email || !password}
           onPress={onSubmit}
+          block
           style={styles.submit}
         />
+      </View>
 
-        <Link href="/(auth)/register" style={styles.link}>
-          <ThemedText type="link">Don&rsquo;t have an account? Register</ThemedText>
-        </Link>
-      </ThemedView>
+      <View style={{ flex: 1 }} />
+
+      <View style={styles.footer}>
+        <Divider style={styles.footerDivider} />
+        <View style={styles.securityNote}>
+          <Lock size={16} color={theme.accent} style={styles.securityIcon} />
+          <ThemedText type="small" themeColor="textSecondary" style={styles.securityText}>
+            Sessions use short-lived access tokens with a rotating refresh token. Your device is
+            registered for push at first sign-in.
+          </ThemedText>
+        </View>
+      </View>
+      <View style={[styles.createAccount, { paddingBottom: insets.bottom + 24 }]}>
+        <ThemedText type="small" themeColor="textSecondary">
+          New here?{' '}
+          <ThemedText type="small" onPress={() => router.push('/(auth)/register')} style={styles.createAccountLink}>
+            Create an account
+          </ThemedText>
+        </ThemedText>
+      </View>
     </ThemedView>
   );
 }
@@ -78,28 +128,79 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  header: {
+    paddingHorizontal: 24,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: Spacing.four,
+    justifyContent: 'space-between',
+  },
+  wordmark: {
+    fontFamily: 'Archivo_800ExtraBold',
+    fontSize: 15,
+  },
+  registerLink: {
+    fontSize: 11,
+    fontFamily: 'Archivo_800ExtraBold',
+    letterSpacing: 0.5,
+  },
+  headerDivider: {
+    marginTop: 16,
   },
   form: {
-    width: '100%',
-    maxWidth: MaxContentWidth / 2,
-    gap: Spacing.three,
+    paddingHorizontal: 24,
+    paddingTop: 28,
   },
   title: {
-    textAlign: 'center',
-    marginBottom: Spacing.three,
+    fontFamily: 'Archivo_800ExtraBold',
+    fontSize: 40,
+    lineHeight: 40,
+    marginBottom: 6,
+  },
+  subtitle: {
+    marginBottom: 26,
+  },
+  fieldGap: {
+    marginBottom: 16,
+  },
+  forgotRow: {
+    alignSelf: 'flex-start',
+    marginTop: 10,
+    marginBottom: 24,
+  },
+  forgotText: {
+    fontSize: 12,
+    fontFamily: 'Archivo_800ExtraBold',
   },
   error: {
-    color: '#d33',
-    textAlign: 'center',
+    marginBottom: 12,
   },
   submit: {
-    marginTop: Spacing.two,
+    marginTop: 0,
   },
-  link: {
-    alignSelf: 'center',
-    marginTop: Spacing.two,
+  footer: {
+    paddingHorizontal: 24,
+  },
+  footerDivider: {
+    marginBottom: 16,
+  },
+  securityNote: {
+    flexDirection: 'row',
+    gap: 10,
+    paddingBottom: 8,
+  },
+  securityIcon: {
+    marginTop: 2,
+  },
+  securityText: {
+    flex: 1,
+    lineHeight: 16,
+  },
+  createAccount: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+  },
+  createAccountLink: {
+    fontFamily: 'Archivo_800ExtraBold',
   },
 });

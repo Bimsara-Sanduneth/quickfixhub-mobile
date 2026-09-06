@@ -16,7 +16,7 @@ export default function AppLayout() {
   }
 
   if (status === 'unauthenticated') {
-    return <Redirect href="/(auth)/login" />;
+    return <Redirect href="/(auth)/onboarding" />;
   }
 
   return <Stack />;
