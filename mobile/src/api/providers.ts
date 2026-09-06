@@ -6,11 +6,15 @@ export async function getProvider(providerId: string): Promise<ProviderDetail> {
   return data;
 }
 
-export async function searchProviders(params: {
+export interface ProviderSearchParams {
   categoryId?: string;
   serviceId?: string;
   q?: string;
-}): Promise<Page<ProviderSummary>> {
+  city?: string;
+  verified?: boolean;
+}
+
+export async function searchProviders(params: ProviderSearchParams): Promise<Page<ProviderSummary>> {
   const { data } = await apiClient.get<Page<ProviderSummary>>('/providers', { params });
   return data;
 }

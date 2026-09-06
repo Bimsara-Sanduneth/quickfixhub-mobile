@@ -21,8 +21,10 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.quickfixhub.backend.provider.ProviderProfileSpecifications.businessNameContains;
+import static com.quickfixhub.backend.provider.ProviderProfileSpecifications.cityContains;
 import static com.quickfixhub.backend.provider.ProviderProfileSpecifications.offersCategory;
 import static com.quickfixhub.backend.provider.ProviderProfileSpecifications.offersService;
+import static com.quickfixhub.backend.provider.ProviderProfileSpecifications.verifiedOnly;
 
 @RestController
 @RequestMapping("/providers")
@@ -42,11 +44,15 @@ public class ProviderController {
 			@RequestParam(required = false) UUID categoryId,
 			@RequestParam(required = false) UUID serviceId,
 			@RequestParam(required = false) String q,
+			@RequestParam(required = false) String city,
+			@RequestParam(required = false) Boolean verified,
 			@PageableDefault(size = 20, sort = "businessName") Pageable pageable) {
 		Specification<ProviderProfile> spec = Specification
 				.where(offersCategory(categoryId))
 				.and(offersService(serviceId))
-				.and(businessNameContains(q));
+				.and(businessNameContains(q))
+				.and(cityContains(city))
+				.and(verifiedOnly(verified));
 		Page<ProviderProfile> page = providerProfileRepository.findAll(spec, pageable);
 
 		var providerIds = page.getContent().stream().map(ProviderProfile::getId).toList();
