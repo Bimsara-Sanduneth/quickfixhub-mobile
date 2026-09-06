@@ -102,6 +102,7 @@ export default function OnboardingScreen() {
           block
           icon={<ArrowRight size={18} color={colors.text} />}
           style={{ backgroundColor: colors.bg }}
+          textColor={colors.text}
           onPress={() => goToRegister('CUSTOMER')}
         />
         <Pressable

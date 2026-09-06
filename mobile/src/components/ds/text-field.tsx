@@ -27,6 +27,9 @@ export function TextField({ label, rightElement, error, style, onFocus, onBlur, 
       )}
       <View style={[styles.box, { backgroundColor: theme.surface, borderColor: error ? theme.accent : theme.divider }]}>
         <TextInput
+          // Android's native EditText often doesn't visually react to a secureTextEntry prop
+          // flip on an already-mounted input - forcing remount via key is the standard fix.
+          key={String(rest.secureTextEntry)}
           placeholderTextColor={theme.textSecondary}
           style={[styles.input, { color: theme.text }, style]}
           {...rest}

@@ -13,6 +13,11 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 @Configuration
 @EnableMethodSecurity
@@ -33,6 +38,7 @@ public class SecurityConfig {
 			"/categories/**",
 			"/services",
 			"/services/**",
+			"/providers",
 			"/providers/**"
 	};
 
@@ -53,9 +59,29 @@ public class SecurityConfig {
 		return new BCryptPasswordEncoder();
 	}
 
+	// Auth is stateless Bearer-token based (no cookies), so there's no session to leak via a
+	// permissive CORS policy - allowCredentials stays false, which is what lets an origin
+	// pattern this broad be safe. Needed because the Expo web preview (localhost:8081 or a LAN
+	// IP for on-device testing) is a different origin from this API by browser rules even when
+	// it's the same machine; without this, the browser silently blocks every request before the
+	// app's JS ever sees a response - it doesn't surface as a proper HTTP error. Scope this down
+	// to known origins before any real deployment.
+	@Bean
+	public CorsConfigurationSource corsConfigurationSource() {
+		CorsConfiguration configuration = new CorsConfiguration();
+		configuration.setAllowedOriginPatterns(List.of("http://localhost:*", "http://127.0.0.1:*", "http://192.168.*.*:*"));
+		configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+		configuration.setAllowedHeaders(List.of("*"));
+		configuration.setAllowCredentials(false);
+		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+		source.registerCorsConfiguration("/**", configuration);
+		return source;
+	}
+
 	@Bean
 	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 		http
+				.cors(cors -> cors.configurationSource(corsConfigurationSource()))
 				.csrf(csrf -> csrf.disable())
 				.sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.authorizeHttpRequests(auth -> auth
