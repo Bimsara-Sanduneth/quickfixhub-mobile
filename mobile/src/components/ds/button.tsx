@@ -15,11 +15,19 @@ export type ButtonProps = Omit<PressableProps, 'style'> & {
   /** Trailing icon (e.g. an ArrowRight) — pushes the label flush left, icon flush right. */
   icon?: ReactNode;
   style?: StyleProp<ViewStyle>;
+  /**
+   * Overrides the computed label/spinner color. Needed on screens that force a specific
+   * Colors.light/Colors.dark palette regardless of the system color scheme (e.g. onboarding,
+   * always on the accent field) — the button otherwise colors its label from the *system*
+   * theme via useTheme(), which can silently match a caller's explicitly-set background
+   * (invisible text) when the two disagree about which palette is active.
+   */
+  textColor?: string;
 };
 
 // Matches the design system's .btn / .btn-primary / .btn-secondary / .btn-block: zero radius,
 // Archivo 800 label, flush-left text (never centered) with an optional trailing icon.
-export function Button({ label, variant = 'primary', loading, block, icon, disabled, style, ...rest }: ButtonProps) {
+export function Button({ label, variant = 'primary', loading, block, icon, disabled, style, textColor, ...rest }: ButtonProps) {
   const theme = useTheme();
   const isDisabled = disabled || loading;
 
@@ -30,7 +38,8 @@ export function Button({ label, variant = 'primary', loading, block, icon, disab
         ? { borderWidth: 1, borderColor: theme.divider, backgroundColor: 'transparent' }
         : { backgroundColor: 'transparent', paddingHorizontal: 4 };
 
-  const labelColor = variant === 'primary' ? theme.bg : variant === 'ghost' ? theme.accent : theme.text;
+  const labelColor =
+    textColor ?? (variant === 'primary' ? theme.bg : variant === 'ghost' ? theme.accent : theme.text);
 
   return (
     <Pressable

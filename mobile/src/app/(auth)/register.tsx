@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Check, User, Wrench } from 'lucide-react-native';
+import { ArrowLeft, Check, Eye, EyeOff, User, Wrench } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -39,6 +39,7 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -129,7 +130,22 @@ export default function RegisterScreen() {
           onChangeText={setPhone}
           style={styles.fieldGap}
         />
-        <TextField label="Password" secureTextEntry autoComplete="password-new" value={password} onChangeText={setPassword} />
+        <TextField
+          label="Password"
+          secureTextEntry={!showPassword}
+          autoComplete="password-new"
+          value={password}
+          onChangeText={setPassword}
+          rightElement={
+            <Pressable onPress={() => setShowPassword((v) => !v)} hitSlop={8}>
+              {showPassword ? (
+                <EyeOff size={16} color={theme.neutral600} />
+              ) : (
+                <Eye size={16} color={theme.neutral600} />
+              )}
+            </Pressable>
+          }
+        />
         {password.length > 0 && (
           <>
             <View style={styles.strengthBars}>
