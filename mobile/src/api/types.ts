@@ -76,3 +76,20 @@ export interface CreateAddressRequest {
   label: string;
   addressText: string;
 }
+
+export interface ProviderServiceItem {
+  serviceId: string;
+  serviceName: string;
+  price: number;
+  durationMinutes: number | null;
+}
+
+export interface ProviderDetail {
+  id: string;
+  businessName: string;
+  bio: string | null;
+  yearsExperience: number | null;
+  city: string | null;
+  verified: boolean;
+  services: ProviderServiceItem[];
+}

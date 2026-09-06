@@ -32,7 +32,8 @@ public class SecurityConfig {
 			"/categories",
 			"/categories/**",
 			"/services",
-			"/services/**"
+			"/services/**",
+			"/providers/**"
 	};
 
 	private final JwtAuthenticationFilter jwtAuthenticationFilter;
