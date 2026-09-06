@@ -93,3 +93,13 @@ export interface ProviderDetail {
   verified: boolean;
   services: ProviderServiceItem[];
 }
+
+export interface ProviderSummary {
+  id: string;
+  businessName: string;
+  city: string | null;
+  verified: boolean;
+  yearsExperience: number | null;
+  // Lowest price among the provider's listed services; null if they haven't listed any.
+  fromPrice: number | null;
+}

@@ -7,12 +7,15 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToMany;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 @Entity
@@ -47,6 +50,11 @@ public class ProviderProfile {
 
 	@Column(name = "updated_at", nullable = false)
 	private Instant updatedAt;
+
+	// Inverse side, unmapped column - exists so search queries can join from ProviderProfile to
+	// the services a provider offers (e.g. "providers offering service X / in category Y").
+	@OneToMany(mappedBy = "providerProfile")
+	private List<ProviderService> services = new ArrayList<>();
 
 	protected ProviderProfile() {
 	}
