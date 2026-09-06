@@ -31,3 +31,28 @@ export interface ApiError {
   message: string;
   path: string;
 }
+
+export interface ServiceCategory {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+}
+
+export interface ServiceOffering {
+  id: string;
+  categoryId: string;
+  categoryName: string;
+  name: string;
+  slug: string;
+  description: string | null;
+}
+
+// Mirrors Spring Data's Page<T> JSON shape.
+export interface Page<T> {
+  content: T[];
+  totalElements: number;
+  totalPages: number;
+  number: number;
+  size: number;
+}

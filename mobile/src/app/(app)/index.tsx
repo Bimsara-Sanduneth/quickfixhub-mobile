@@ -1,21 +1,85 @@
-import { StyleSheet } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
+import { router, Stack } from 'expo-router';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet } from 'react-native';
 
+import { listCategories } from '@/api/catalog';
+import { extractErrorMessage } from '@/api/errors';
+import type { ServiceCategory } from '@/api/types';
 import { useAuth } from '@/auth/AuthContext';
-import { PrimaryButton } from '@/components/primary-button';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { Spacing } from '@/constants/theme';
+import { useTheme } from '@/hooks/use-theme';
 
-export default function HomeScreen() {
+export default function CategoryBrowseScreen() {
   const { logout } = useAuth();
+  const theme = useTheme();
+  const { data, isPending, isError, error, refetch, isRefetching } = useQuery({
+    queryKey: ['categories'],
+    queryFn: listCategories,
+  });
+
+  function openCategory(category: ServiceCategory) {
+    router.push({
+      pathname: '/(app)/categories/[categoryId]',
+      params: { categoryId: category.id, name: category.name },
+    });
+  }
 
   return (
     <ThemedView style={styles.container}>
-      <ThemedText type="title" style={styles.title}>
-        You&rsquo;re in
-      </ThemedText>
-      <ThemedText type="default">The QuickFixHub mobile foundation is wired up.</ThemedText>
-      <PrimaryButton label="Log out" onPress={logout} style={styles.button} />
+      <Stack.Screen
+        options={{
+          title: 'Browse services',
+          headerRight: () => (
+            <Pressable onPress={logout} hitSlop={8}>
+              <ThemedText type="link">Log out</ThemedText>
+            </Pressable>
+          ),
+        }}
+      />
+
+      {isPending && (
+        <ThemedView style={styles.centered}>
+          <ActivityIndicator />
+        </ThemedView>
+      )}
+
+      {isError && (
+        <ThemedView style={styles.centered}>
+          <ThemedText type="small" style={styles.error}>
+            {extractErrorMessage(error)}
+          </ThemedText>
+          <Pressable onPress={() => refetch()}>
+            <ThemedText type="link">Try again</ThemedText>
+          </Pressable>
+        </ThemedView>
+      )}
+
+      {data && (
+        <FlatList
+          data={data}
+          keyExtractor={(item) => item.id}
+          refreshing={isRefetching}
+          onRefresh={refetch}
+          contentContainerStyle={styles.list}
+          renderItem={({ item }) => (
+            <Pressable
+              onPress={() => openCategory(item)}
+              style={[styles.row, { borderColor: theme.backgroundSelected }]}>
+              <ThemedView style={styles.rowContent}>
+                <ThemedText type="default">{item.name}</ThemedText>
+                {item.description && (
+                  <ThemedText type="small" themeColor="textSecondary">
+                    {item.description}
+                  </ThemedText>
+                )}
+              </ThemedView>
+              <ThemedText themeColor="textSecondary">{'>'}</ThemedText>
+            </Pressable>
+          )}
+        />
+      )}
     </ThemedView>
   );
 }
@@ -23,16 +87,32 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  centered: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: Spacing.three,
-    padding: Spacing.four,
+    gap: Spacing.two,
   },
-  title: {
+  error: {
+    color: '#d33',
     textAlign: 'center',
   },
-  button: {
-    paddingHorizontal: Spacing.four,
-    marginTop: Spacing.three,
+  list: {
+    padding: Spacing.three,
+    gap: Spacing.two,
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: Spacing.three,
+    gap: Spacing.two,
+  },
+  rowContent: {
+    flex: 1,
+    gap: 2,
   },
 });
