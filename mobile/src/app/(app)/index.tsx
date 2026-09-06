@@ -1,23 +1,75 @@
 import { useQuery } from '@tanstack/react-query';
-import { router, Stack } from 'expo-router';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet } from 'react-native';
+import { Redirect, router, Stack } from 'expo-router';
+import {
+  Bell,
+  Calendar,
+  House,
+  Leaf,
+  MessageSquare,
+  PaintBucket,
+  Refrigerator,
+  Search,
+  Sparkles,
+  User,
+  Wrench,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react-native';
+import { useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { listCategories } from '@/api/catalog';
 import { extractErrorMessage } from '@/api/errors';
-import type { ServiceCategory } from '@/api/types';
+import { getCurrentUser } from '@/api/me';
+import { searchProviders } from '@/api/providers';
+import type { ProviderSummary, ServiceCategory } from '@/api/types';
 import { useAuth } from '@/auth/AuthContext';
+import { Tag } from '@/components/ds/tag';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
-import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  plumbing: Wrench,
+  electrical: Zap,
+  cleaning: Sparkles,
+  landscaping: Leaf,
+  painting: PaintBucket,
+  'appliance-repair': Refrigerator,
+};
+
+function categoryIcon(slug: string): LucideIcon {
+  return CATEGORY_ICONS[slug] ?? Wrench;
+}
+
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
 export default function CategoryBrowseScreen() {
-  const { logout } = useAuth();
+  const insets = useSafeAreaInsets();
   const theme = useTheme();
-  const { data, isPending, isError, error, refetch, isRefetching } = useQuery({
-    queryKey: ['categories'],
-    queryFn: listCategories,
+  const { logout, justRegistered } = useAuth();
+  const [query, setQuery] = useState('');
+
+  const { data: me } = useQuery({ queryKey: ['me'], queryFn: getCurrentUser, enabled: !justRegistered });
+  const categories = useQuery({ queryKey: ['categories'], queryFn: listCategories, enabled: !justRegistered });
+  const providers = useQuery({
+    queryKey: ['providers', { q: query }],
+    queryFn: () => searchProviders({ q: query || undefined }),
+    enabled: !justRegistered,
   });
+
+  // A fresh registration routes through profile-completion once before landing here - decided
+  // here (the group's actual entry point) rather than in (app)/_layout.tsx, so it doesn't race
+  // or block the Stack from ever rendering the profile-completion screen it redirects to.
+  if (justRegistered) {
+    return <Redirect href="/(app)/profile-completion" />;
+  }
 
   function openCategory(category: ServiceCategory) {
     router.push({
@@ -26,60 +78,123 @@ export default function CategoryBrowseScreen() {
     });
   }
 
+  function openProvider(provider: ProviderSummary) {
+    router.push({ pathname: '/(app)/providers/[providerId]', params: { providerId: provider.id } });
+  }
+
   return (
     <ThemedView style={styles.container}>
-      <Stack.Screen
-        options={{
-          title: 'Browse services',
-          headerRight: () => (
-            <Pressable onPress={logout} hitSlop={8}>
-              <ThemedText type="link">Log out</ThemedText>
-            </Pressable>
-          ),
-        }}
+      <Stack.Screen options={{ headerShown: false }} />
+
+      <FlatList
+        data={providers.data?.content ?? []}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        ListHeaderComponent={
+          <>
+            <View style={[styles.hero, { backgroundColor: theme.accent, paddingTop: insets.top + 20 }]}>
+              <View style={styles.heroTopRow}>
+                <ThemedText style={[styles.wordmark, { color: theme.bg }]}>QUICKFIXHUB</ThemedText>
+                {/* No notifications system yet - purely decorative for now. */}
+                <Bell size={20} color={theme.bg} />
+              </View>
+              <ThemedText style={[styles.heroTitle, { color: theme.bg }]}>Fixed{'\n'}today.</ThemedText>
+              <ThemedText style={[styles.heroSubtitle, { color: theme.bg }]}>
+                {getGreeting()}{me ? `, ${me.fullName.split(' ')[0]}` : ''}.
+              </ThemedText>
+              <View style={[styles.searchBar, { backgroundColor: theme.bg }]}>
+                <Search size={16} color={theme.neutral600} />
+                <TextInput
+                  value={query}
+                  onChangeText={setQuery}
+                  placeholder="What needs fixing?"
+                  placeholderTextColor={theme.neutral600}
+                  style={[styles.searchInput, { color: theme.text }]}
+                />
+              </View>
+            </View>
+
+            <ThemedText type="smallBold" style={styles.sectionTitle}>
+              Browse categories
+            </ThemedText>
+            {categories.isPending ? (
+              <ActivityIndicator style={styles.sectionLoading} />
+            ) : (
+              <View style={[styles.categoryGrid, { backgroundColor: theme.divider }]}>
+                {categories.data?.map((category) => {
+                  const Icon = categoryIcon(category.slug);
+                  return (
+                    <Pressable
+                      key={category.id}
+                      style={[styles.categoryTile, { backgroundColor: theme.bg }]}
+                      onPress={() => openCategory(category)}>
+                      <Icon size={20} color={theme.accent} />
+                      <ThemedText style={styles.categoryLabel}>{category.name}</ThemedText>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
+            <View style={styles.recommendedHeader}>
+              <ThemedText type="smallBold">Recommended for you</ThemedText>
+            </View>
+
+            {providers.isError && (
+              <ThemedText type="small" style={{ color: theme.accent, paddingHorizontal: 20 }}>
+                {extractErrorMessage(providers.error)}
+              </ThemedText>
+            )}
+            {providers.isPending && <ActivityIndicator style={styles.sectionLoading} />}
+          </>
+        }
+        ListEmptyComponent={
+          !providers.isPending ? (
+            <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
+              No providers found.
+            </ThemedText>
+          ) : null
+        }
+        renderItem={({ item }) => (
+          <Pressable style={[styles.providerRow, { borderColor: theme.divider }]} onPress={() => openProvider(item)}>
+            <View style={[styles.providerPhoto, { backgroundColor: theme.neutral200 }]} />
+            <View style={{ flex: 1 }}>
+              <ThemedText style={styles.providerName}>{item.businessName}</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary" style={styles.providerMeta}>
+                {[item.city, item.yearsExperience != null ? `${item.yearsExperience} yrs` : null]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </ThemedText>
+              <View style={styles.providerTags}>
+                {item.verified && <Tag label="VERIFIED" variant="accent" />}
+                {item.fromPrice != null && <Tag label={`FROM $${item.fromPrice.toFixed(2)}`} variant="neutral" />}
+              </View>
+            </View>
+          </Pressable>
+        )}
       />
 
-      {isPending && (
-        <ThemedView style={styles.centered}>
-          <ActivityIndicator />
-        </ThemedView>
-      )}
-
-      {isError && (
-        <ThemedView style={styles.centered}>
-          <ThemedText type="small" style={styles.error}>
-            {extractErrorMessage(error)}
-          </ThemedText>
-          <Pressable onPress={() => refetch()}>
-            <ThemedText type="link">Try again</ThemedText>
-          </Pressable>
-        </ThemedView>
-      )}
-
-      {data && (
-        <FlatList
-          data={data}
-          keyExtractor={(item) => item.id}
-          refreshing={isRefetching}
-          onRefresh={refetch}
-          contentContainerStyle={styles.list}
-          renderItem={({ item }) => (
-            <Pressable
-              onPress={() => openCategory(item)}
-              style={[styles.row, { borderColor: theme.backgroundSelected }]}>
-              <ThemedView style={styles.rowContent}>
-                <ThemedText type="default">{item.name}</ThemedText>
-                {item.description && (
-                  <ThemedText type="small" themeColor="textSecondary">
-                    {item.description}
-                  </ThemedText>
-                )}
-              </ThemedView>
-              <ThemedText themeColor="textSecondary">{'>'}</ThemedText>
-            </Pressable>
-          )}
-        />
-      )}
+      <View style={[styles.tabBar, { borderTopColor: theme.divider, paddingBottom: insets.bottom + 10 }]}>
+        <View style={styles.tabItem}>
+          <House size={20} color={theme.accent} />
+          <ThemedText style={[styles.tabLabel, { color: theme.accent }]}>HOME</ThemedText>
+        </View>
+        {/* Bookings/Chat/You have no screens yet - placeholders until those milestones land. */}
+        <View style={styles.tabItem}>
+          <Calendar size={20} color={theme.neutral500} />
+          <ThemedText style={[styles.tabLabel, { color: theme.neutral500 }]}>BOOKINGS</ThemedText>
+        </View>
+        <View style={styles.tabItem}>
+          <MessageSquare size={20} color={theme.neutral500} />
+          <ThemedText style={[styles.tabLabel, { color: theme.neutral500 }]}>CHAT</ThemedText>
+        </View>
+        {/* Stands in for the real profile/settings screen (design 2q, not built yet) - logout
+            needs to be reachable from somewhere for now. */}
+        <Pressable style={styles.tabItem} onPress={logout}>
+          <User size={20} color={theme.neutral500} />
+          <ThemedText style={[styles.tabLabel, { color: theme.neutral500 }]}>YOU</ThemedText>
+        </Pressable>
+      </View>
     </ThemedView>
   );
 }
@@ -88,31 +203,120 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  centered: {
-    flex: 1,
+  listContent: {
+    flexGrow: 1,
+  },
+  hero: {
+    paddingHorizontal: 20,
+    paddingBottom: 18,
+  },
+  heroTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.two,
+    marginBottom: 18,
   },
-  error: {
-    color: '#d33',
-    textAlign: 'center',
+  wordmark: {
+    fontFamily: 'Archivo_800ExtraBold',
+    fontSize: 15,
+    letterSpacing: 0.3,
   },
-  list: {
-    padding: Spacing.three,
-    gap: Spacing.two,
+  heroTitle: {
+    fontFamily: 'Archivo_800ExtraBold',
+    fontSize: 44,
+    lineHeight: 43,
+    marginBottom: 6,
   },
-  row: {
+  heroSubtitle: {
+    fontSize: 12,
+    opacity: 0.85,
+    marginBottom: 18,
+  },
+  searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderRadius: 8,
-    padding: Spacing.three,
-    gap: Spacing.two,
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
   },
-  rowContent: {
+  searchInput: {
     flex: 1,
+    fontSize: 14,
+    padding: 0,
+  },
+  sectionTitle: {
+    paddingHorizontal: 20,
+    paddingTop: 18,
+    paddingBottom: 10,
+  },
+  sectionLoading: {
+    marginVertical: 12,
+  },
+  categoryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 2,
+    marginHorizontal: 20,
+  },
+  categoryTile: {
+    width: '33%',
+    minHeight: 84,
+    paddingVertical: 14,
+    paddingHorizontal: 10,
+    gap: 10,
+    flexGrow: 1,
+  },
+  categoryLabel: {
+    fontFamily: 'Archivo_800ExtraBold',
+    fontSize: 12,
+    lineHeight: 15,
+  },
+  recommendedHeader: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 10,
+  },
+  emptyText: {
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  providerRow: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingBottom: 14,
+    borderBottomWidth: 1,
+    marginBottom: 14,
+  },
+  providerPhoto: {
+    width: 72,
+    height: 72,
+  },
+  providerName: {
+    fontFamily: 'Archivo_800ExtraBold',
+    fontSize: 16,
+  },
+  providerMeta: {
+    marginVertical: 2,
+    marginBottom: 8,
+  },
+  providerTags: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  tabBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingTop: 10,
+    borderTopWidth: 2,
+  },
+  tabItem: {
+    alignItems: 'center',
+    gap: 4,
+  },
+  tabLabel: {
+    fontSize: 9,
+    fontFamily: 'Archivo_800ExtraBold',
+    letterSpacing: 0.5,
   },
 });
