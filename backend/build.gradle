@@ -49,6 +49,13 @@ tasks.named('test') {
 // without this, `.env` sits there unused and DB_URL/etc. silently fall back to the defaults
 // baked into application.yml. Loads .env into bootRun's and test's environment so the workflow
 // the README documents (`cp .env.example .env` then `./gradlew bootRun`) actually works.
+//
+// Only fills in keys NOT already present in the environment - an already-exported shell
+// variable (e.g. `DB_URL=... ./gradlew bootRun`, used for one-off verification against a
+// different database) must win over .env, matching every other dotenv tool's convention.
+// Getting this backwards once silently redirected a "throwaway" verification run at the real
+// dev database instead - additive Flyway migrations made it harmless, but it defeated the
+// point of an isolated check.
 def envFile = rootProject.file('.env')
 if (envFile.exists()) {
 	def envVars = [:]
@@ -56,7 +63,10 @@ if (envFile.exists()) {
 		def trimmed = line.trim()
 		if (trimmed && !trimmed.startsWith('#') && trimmed.contains('=')) {
 			def (key, value) = trimmed.split('=', 2)
-			envVars[key.trim()] = value.trim()
+			def trimmedKey = key.trim()
+			if (System.getenv(trimmedKey) == null) {
+				envVars[trimmedKey] = value.trim()
+			}
 		}
 	}
 	tasks.named('bootRun') { environment(envVars) }
