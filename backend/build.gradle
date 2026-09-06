@@ -44,3 +44,21 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
+// Spring Boot has no built-in .env support (that's Docker Compose's doing, not the JVM's) -
+// without this, `.env` sits there unused and DB_URL/etc. silently fall back to the defaults
+// baked into application.yml. Loads .env into bootRun's and test's environment so the workflow
+// the README documents (`cp .env.example .env` then `./gradlew bootRun`) actually works.
+def envFile = rootProject.file('.env')
+if (envFile.exists()) {
+	def envVars = [:]
+	envFile.eachLine { line ->
+		def trimmed = line.trim()
+		if (trimmed && !trimmed.startsWith('#') && trimmed.contains('=')) {
+			def (key, value) = trimmed.split('=', 2)
+			envVars[key.trim()] = value.trim()
+		}
+	}
+	tasks.named('bootRun') { environment(envVars) }
+	tasks.named('test') { environment(envVars) }
+}

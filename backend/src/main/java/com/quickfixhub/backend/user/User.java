@@ -31,6 +31,9 @@ public class User {
 	@Column(name = "full_name", nullable = false)
 	private String fullName;
 
+	@Column
+	private String phone;
+
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
 	private Role role;
@@ -47,10 +50,11 @@ public class User {
 	protected User() {
 	}
 
-	public User(String email, String passwordHash, String fullName, Role role) {
+	public User(String email, String passwordHash, String fullName, String phone, Role role) {
 		this.email = email;
 		this.passwordHash = passwordHash;
 		this.fullName = fullName;
+		this.phone = phone;
 		this.role = role;
 	}
 
@@ -80,6 +84,10 @@ public class User {
 
 	public String getFullName() {
 		return fullName;
+	}
+
+	public String getPhone() {
+		return phone;
 	}
 
 	public Role getRole() {

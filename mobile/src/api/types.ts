@@ -4,6 +4,7 @@ export interface RegisterRequest {
   email: string;
   password: string;
   fullName: string;
+  phone?: string;
   // Self-registration as ADMIN is rejected by the backend.
   role: Exclude<Role, 'ADMIN'>;
 }
@@ -55,4 +56,23 @@ export interface Page<T> {
   totalPages: number;
   number: number;
   size: number;
+}
+
+export interface User {
+  id: string;
+  email: string;
+  fullName: string;
+  phone: string | null;
+  role: Role;
+}
+
+export interface Address {
+  id: string;
+  label: string;
+  addressText: string;
+}
+
+export interface CreateAddressRequest {
+  label: string;
+  addressText: string;
 }

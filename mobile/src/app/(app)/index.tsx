@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { router, Stack } from 'expo-router';
+import { Redirect, router, Stack } from 'expo-router';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet } from 'react-native';
 
 import { listCategories } from '@/api/catalog';
@@ -12,12 +12,21 @@ import { Spacing } from '@/constants/theme';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function CategoryBrowseScreen() {
-  const { logout } = useAuth();
+  const { logout, justRegistered } = useAuth();
   const theme = useTheme();
   const { data, isPending, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['categories'],
     queryFn: listCategories,
+    // Skip the fetch entirely when we're about to redirect away anyway.
+    enabled: !justRegistered,
   });
+
+  // A fresh registration routes through profile-completion once before landing here - decided
+  // here (the group's actual entry point) rather than in (app)/_layout.tsx, so it doesn't race
+  // or block the Stack from ever rendering the profile-completion screen it redirects to.
+  if (justRegistered) {
+    return <Redirect href="/(app)/profile-completion" />;
+  }
 
   function openCategory(category: ServiceCategory) {
     router.push({
