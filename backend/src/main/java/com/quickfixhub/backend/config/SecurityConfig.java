@@ -5,6 +5,7 @@ import com.quickfixhub.backend.exception.RestAccessDeniedHandler;
 import com.quickfixhub.backend.exception.RestAuthenticationEntryPoint;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -24,6 +25,14 @@ public class SecurityConfig {
 			"/v3/api-docs/**",
 			"/swagger-ui/**",
 			"/swagger-ui.html"
+	};
+
+	// Read-only catalog browsing is public; write access to these paths (if ever added) is not.
+	private static final String[] PUBLIC_GET_PATHS = {
+			"/categories",
+			"/categories/**",
+			"/services",
+			"/services/**"
 	};
 
 	private final JwtAuthenticationFilter jwtAuthenticationFilter;
@@ -50,6 +59,7 @@ public class SecurityConfig {
 				.sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers(PUBLIC_PATHS).permitAll()
+						.requestMatchers(HttpMethod.GET, PUBLIC_GET_PATHS).permitAll()
 						.anyRequest().authenticated())
 				.exceptionHandling(ex -> ex
 						.authenticationEntryPoint(authenticationEntryPoint)
