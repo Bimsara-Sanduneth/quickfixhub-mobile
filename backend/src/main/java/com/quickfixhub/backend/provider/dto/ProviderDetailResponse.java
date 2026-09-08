@@ -15,7 +15,11 @@ public record ProviderDetailResponse(
 		List<ProviderServiceResponse> services,
 		// Null (not 0) averageRating means "no reviews yet".
 		Double averageRating,
-		long reviewCount) {
+		long reviewCount,
+		// Geocoded from the provider's city at profile-creation time (best-effort - null if
+		// geocoding failed or the provider never set a city).
+		Double latitude,
+		Double longitude) {
 
 	public static ProviderDetailResponse from(ProviderProfile profile, List<ProviderServiceResponse> services,
 			Double averageRating, long reviewCount) {
@@ -28,6 +32,8 @@ public record ProviderDetailResponse(
 				profile.isVerified(),
 				services,
 				averageRating,
-				reviewCount);
+				reviewCount,
+				profile.getLatitude(),
+				profile.getLongitude());
 	}
 }

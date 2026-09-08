@@ -6,6 +6,7 @@ import com.quickfixhub.backend.booking.BookingRepository;
 import com.quickfixhub.backend.booking.dto.BookingResponse;
 import com.quickfixhub.backend.catalog.ServiceOffering;
 import com.quickfixhub.backend.catalog.ServiceOfferingRepository;
+import com.quickfixhub.backend.geo.GeocodingService;
 import com.quickfixhub.backend.provider.dto.AddProviderServiceRequest;
 import com.quickfixhub.backend.provider.dto.CreateProviderProfileRequest;
 import com.quickfixhub.backend.provider.dto.ProviderDetailResponse;
@@ -44,11 +45,12 @@ public class MyProviderProfileController {
 	private final UserRepository userRepository;
 	private final BookingRepository bookingRepository;
 	private final BookingExpiryService bookingExpiryService;
+	private final GeocodingService geocodingService;
 
 	public MyProviderProfileController(ProviderProfileRepository providerProfileRepository,
 			ProviderServiceRepository providerServiceRepository, ServiceOfferingRepository serviceOfferingRepository,
 			ReviewRepository reviewRepository, UserRepository userRepository, BookingRepository bookingRepository,
-			BookingExpiryService bookingExpiryService) {
+			BookingExpiryService bookingExpiryService, GeocodingService geocodingService) {
 		this.providerProfileRepository = providerProfileRepository;
 		this.providerServiceRepository = providerServiceRepository;
 		this.serviceOfferingRepository = serviceOfferingRepository;
@@ -56,6 +58,7 @@ public class MyProviderProfileController {
 		this.userRepository = userRepository;
 		this.bookingRepository = bookingRepository;
 		this.bookingExpiryService = bookingExpiryService;
+		this.geocodingService = geocodingService;
 	}
 
 	@GetMapping
@@ -75,6 +78,12 @@ public class MyProviderProfileController {
 		}
 		ProviderProfile profile = new ProviderProfile(userRepository.getReferenceById(userId), request.businessName(),
 				request.bio(), request.yearsExperience(), request.city());
+		// Best-effort - a geocoding failure (network, no match) never blocks profile creation,
+		// it just leaves the provider off the discovery map (2g) until fixed some other way.
+		geocodingService.geocode(request.city()).ifPresent(latLng -> {
+			profile.setLatitude(latLng[0]);
+			profile.setLongitude(latLng[1]);
+		});
 		return toDetailResponse(providerProfileRepository.save(profile));
 	}
 

@@ -1,14 +1,14 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MessageSquare, Phone } from 'lucide-react-native';
+import { ArrowLeft, Bookmark, BookmarkCheck, MessageSquare, Phone } from 'lucide-react-native';
 import { useMemo } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { extractErrorMessage } from '@/api/errors';
-import { getProvider } from '@/api/providers';
+import { getProvider, listSavedProviders, saveProvider, unsaveProvider } from '@/api/providers';
 import { listProviderReviews } from '@/api/reviews';
-import type { ProviderServiceItem } from '@/api/types';
+import { REVIEW_TAG_LABEL, type ProviderServiceItem, type ReviewTag } from '@/api/types';
 import { Button } from '@/components/ds/button';
 import { Tag } from '@/components/ds/tag';
 import { StarRating } from '@/components/star-rating';
@@ -23,6 +23,7 @@ export default function ProviderDetailScreen() {
   const { providerId } = useLocalSearchParams<{ providerId: string }>();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
+  const queryClient = useQueryClient();
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['providers', providerId],
@@ -34,6 +35,15 @@ export default function ProviderDetailScreen() {
     queryFn: () => listProviderReviews(providerId),
     enabled: !!providerId,
   });
+  const saved = useQuery({ queryKey: ['savedProviders'], queryFn: listSavedProviders });
+  const isSaved = saved.data?.some((p) => p.id === providerId) ?? false;
+
+  function invalidateSaved() {
+    queryClient.invalidateQueries({ queryKey: ['savedProviders'] });
+  }
+  const saveMutation = useMutation({ mutationFn: () => saveProvider(providerId), onSuccess: invalidateSaved });
+  const unsaveMutation = useMutation({ mutationFn: () => unsaveProvider(providerId), onSuccess: invalidateSaved });
+  const savePending = saveMutation.isPending || unsaveMutation.isPending;
 
   const fromPrice = useMemo(() => {
     if (!data || data.services.length === 0) return null;
@@ -113,6 +123,13 @@ export default function ProviderDetailScreen() {
                 {review.comment}
               </ThemedText>
             )}
+            {review.tags.length > 0 && (
+              <View style={styles.reviewTagRow}>
+                {review.tags.map((tag) => (
+                  <Tag key={tag} label={REVIEW_TAG_LABEL[tag as ReviewTag] ?? tag} variant="neutral" />
+                ))}
+              </View>
+            )}
           </View>
         ))
       )}
@@ -136,6 +153,17 @@ export default function ProviderDetailScreen() {
               <View style={styles.avatarRow}>
                 <View style={[styles.avatar, { backgroundColor: theme.neutral200, borderColor: theme.bg }]} />
                 <View style={styles.actionIcons}>
+                  <Pressable
+                    style={[styles.actionIcon, { borderColor: theme.divider, backgroundColor: isSaved ? theme.accent : 'transparent' }]}
+                    disabled={savePending}
+                    onPress={() => (isSaved ? unsaveMutation.mutate() : saveMutation.mutate())}
+                    hitSlop={4}>
+                    {isSaved ? (
+                      <BookmarkCheck size={17} color={theme.bg} />
+                    ) : (
+                      <Bookmark size={17} color={theme.text} />
+                    )}
+                  </Pressable>
                   {/* No calling/chat system yet - decorative for now. */}
                   <View style={[styles.actionIcon, { borderColor: theme.divider }]}>
                     <Phone size={17} color={theme.text} />
@@ -368,6 +396,12 @@ const styles = StyleSheet.create({
   },
   reviewComment: {
     lineHeight: 18,
+  },
+  reviewTagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
   },
   footer: {
     borderTopWidth: 2,

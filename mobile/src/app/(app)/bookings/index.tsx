@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { listMyBookings } from '@/api/bookings';
 import { extractErrorMessage } from '@/api/errors';
 import { createReview } from '@/api/reviews';
-import type { Booking } from '@/api/types';
+import { REVIEW_TAG_LABEL, REVIEW_TAGS, type Booking } from '@/api/types';
 import { CancelBookingDialog } from '@/components/cancel-booking-dialog';
 import { Button } from '@/components/ds/button';
 import { Dialog } from '@/components/ds/dialog';
@@ -35,6 +35,7 @@ export default function MyBookingsScreen() {
   const [reviewTarget, setReviewTarget] = useState<Booking | null>(null);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
+  const [reviewTags, setReviewTags] = useState<string[]>([]);
 
   const { data, isPending, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['bookings'],
@@ -43,7 +44,11 @@ export default function MyBookingsScreen() {
 
   const reviewMutation = useMutation({
     mutationFn: () =>
-      createReview(reviewTarget!.id, { rating: reviewRating, comment: reviewComment.trim() || undefined }),
+      createReview(reviewTarget!.id, {
+        rating: reviewRating,
+        comment: reviewComment.trim() || undefined,
+        tags: reviewTags.length > 0 ? reviewTags : undefined,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
       queryClient.invalidateQueries({ queryKey: ['providers', reviewTarget?.providerProfileId] });
@@ -55,12 +60,18 @@ export default function MyBookingsScreen() {
     setReviewTarget(booking);
     setReviewRating(0);
     setReviewComment('');
+    setReviewTags([]);
   }
 
   function closeReviewDialog() {
     setReviewTarget(null);
     setReviewRating(0);
     setReviewComment('');
+    setReviewTags([]);
+  }
+
+  function toggleReviewTag(tag: string) {
+    setReviewTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
   }
 
   function openChat(booking: Booking) {
@@ -172,6 +183,13 @@ export default function MyBookingsScreen() {
           </>
         }>
         <StarRating rating={reviewRating} onChange={setReviewRating} size={28} style={styles.reviewStars} />
+        <View style={styles.reviewTagWrap}>
+          {REVIEW_TAGS.map((tag) => (
+            <Pressable key={tag} onPress={() => toggleReviewTag(tag)}>
+              <Tag label={REVIEW_TAG_LABEL[tag]} variant={reviewTags.includes(tag) ? 'solid' : 'outline'} />
+            </Pressable>
+          ))}
+        </View>
         <TextField
           placeholder="How did it go? (optional)"
           value={reviewComment}
@@ -259,6 +277,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   reviewStars: {
+    marginBottom: 12,
+  },
+  reviewTagWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
     marginBottom: 12,
   },
   reviewCommentInput: {

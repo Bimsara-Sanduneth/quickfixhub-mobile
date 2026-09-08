@@ -51,7 +51,8 @@ public class ReviewController {
 			throw new ResponseStatusException(HttpStatus.CONFLICT, "This booking has already been reviewed");
 		}
 
-		Review review = new Review(booking, booking.getCustomer(), booking.getProviderProfile(), request.rating(), request.comment());
+		Review review = new Review(booking, booking.getCustomer(), booking.getProviderProfile(), request.rating(), request.comment(),
+				request.tags());
 		return ReviewResponse.from(reviewRepository.save(review));
 	}
 

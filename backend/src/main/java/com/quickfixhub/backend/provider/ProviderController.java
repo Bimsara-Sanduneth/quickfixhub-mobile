@@ -1,10 +1,12 @@
 package com.quickfixhub.backend.provider;
 
+import com.quickfixhub.backend.geo.GeoUtils;
 import com.quickfixhub.backend.provider.dto.ProviderDetailResponse;
 import com.quickfixhub.backend.provider.dto.ProviderServiceResponse;
 import com.quickfixhub.backend.provider.dto.ProviderSummaryResponse;
 import com.quickfixhub.backend.review.ReviewRepository;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.web.PageableDefault;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -50,6 +53,13 @@ public class ProviderController {
 			@RequestParam(required = false) String q,
 			@RequestParam(required = false) String city,
 			@RequestParam(required = false) Boolean verified,
+			// Radius discovery (2g) - when all three are given, results are filtered to
+			// providers within radiusKm of (lat, lng) and sorted nearest-first instead of the
+			// default businessName ordering. A provider with no geocoded location is excluded
+			// (there's nothing to measure a distance from).
+			@RequestParam(required = false) Double lat,
+			@RequestParam(required = false) Double lng,
+			@RequestParam(required = false) Double radiusKm,
 			@PageableDefault(size = 20, sort = "businessName") Pageable pageable) {
 		Specification<ProviderProfile> spec = Specification
 				.where(offersCategory(categoryId))
@@ -57,7 +67,10 @@ public class ProviderController {
 				.and(businessNameContains(q))
 				.and(cityContains(city))
 				.and(verifiedOnly(verified));
-		Page<ProviderProfile> page = providerProfileRepository.findAll(spec, pageable);
+
+		Page<ProviderProfile> page = (lat != null && lng != null && radiusKm != null)
+				? searchWithinRadius(spec, lat, lng, radiusKm, pageable)
+				: providerProfileRepository.findAll(spec, pageable);
 
 		var providerIds = page.getContent().stream().map(ProviderProfile::getId).toList();
 		Map<UUID, BigDecimal> fromPrices = providerServiceRepository.findMinPricesByProviderProfileIds(providerIds).stream()
@@ -74,6 +87,25 @@ public class ProviderController {
 			long reviewCount = rating != null ? rating.getReviewCount() : 0;
 			return ProviderSummaryResponse.from(profile, fromPrices.get(profile.getId()), averageRating, reviewCount);
 		});
+	}
+
+	// In-memory distance filter/sort/paginate rather than a Criteria-API Haversine expression -
+	// simpler to read, and this project's provider count is nowhere near the scale where fetching
+	// the (already category/city/etc-filtered) candidate set unpaged would matter.
+	private Page<ProviderProfile> searchWithinRadius(Specification<ProviderProfile> spec, double lat, double lng,
+			double radiusKm, Pageable pageable) {
+		List<ProviderProfile> withinRadius = providerProfileRepository.findAll(spec).stream()
+				.filter(p -> p.getLatitude() != null && p.getLongitude() != null)
+				.filter(p -> GeoUtils.haversineKm(lat, lng, p.getLatitude(), p.getLongitude()) <= radiusKm)
+				.sorted(Comparator.comparingDouble(p -> GeoUtils.haversineKm(lat, lng, p.getLatitude(), p.getLongitude())))
+				.toList();
+
+		int start = (int) pageable.getOffset();
+		if (start >= withinRadius.size()) {
+			return new PageImpl<>(List.of(), pageable, withinRadius.size());
+		}
+		int end = Math.min(start + pageable.getPageSize(), withinRadius.size());
+		return new PageImpl<>(withinRadius.subList(start, end), pageable, withinRadius.size());
 	}
 
 	@GetMapping("/{id}")
