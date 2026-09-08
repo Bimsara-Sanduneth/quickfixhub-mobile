@@ -15,7 +15,6 @@ import {
   Zap,
   type LucideIcon,
 } from 'lucide-react-native';
-import { useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -25,7 +24,7 @@ import { getCurrentUser } from '@/api/me';
 import { searchProviders } from '@/api/providers';
 import type { ProviderSummary, ServiceCategory } from '@/api/types';
 import { useAuth } from '@/auth/AuthContext';
-import { Tag } from '@/components/ds/tag';
+import { ProviderListItem } from '@/components/provider-list-item';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
@@ -53,22 +52,23 @@ function getGreeting(): string {
 export default function CategoryBrowseScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
-  const { logout, justRegistered } = useAuth();
-  const [query, setQuery] = useState('');
+  const { logout, justRegistered, justRegisteredRole } = useAuth();
 
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: getCurrentUser, enabled: !justRegistered });
   const categories = useQuery({ queryKey: ['categories'], queryFn: listCategories, enabled: !justRegistered });
   const providers = useQuery({
-    queryKey: ['providers', { q: query }],
-    queryFn: () => searchProviders({ q: query || undefined }),
+    queryKey: ['providers', 'recommended'],
+    queryFn: () => searchProviders({}),
     enabled: !justRegistered,
   });
 
-  // A fresh registration routes through profile-completion once before landing here - decided
+  // A fresh registration routes through a one-time setup screen before landing here - decided
   // here (the group's actual entry point) rather than in (app)/_layout.tsx, so it doesn't race
-  // or block the Stack from ever rendering the profile-completion screen it redirects to.
+  // or block the Stack from ever rendering the screen it redirects to. Providers get their own
+  // business-profile setup instead of the customer-oriented address/avatar screen, since a
+  // provider signup with no provider_profile row is invisible to every customer-facing endpoint.
   if (justRegistered) {
-    return <Redirect href="/(app)/profile-completion" />;
+    return <Redirect href={justRegisteredRole === 'PROVIDER' ? '/(app)/provider-onboarding' : '/(app)/profile-completion'} />;
   }
 
   function openCategory(category: ServiceCategory) {
@@ -102,16 +102,21 @@ export default function CategoryBrowseScreen() {
               <ThemedText style={[styles.heroSubtitle, { color: theme.bg }]}>
                 {getGreeting()}{me ? `, ${me.fullName.split(' ')[0]}` : ''}.
               </ThemedText>
-              <View style={[styles.searchBar, { backgroundColor: theme.bg }]}>
+              {/* Not a live-editable field on Home - tapping it jumps straight to the dedicated
+                  Search screen (with its own input + filter sheet), same as most marketplace
+                  apps' home search bar. editable/pointerEvents keep every tap on the Pressable. */}
+              <Pressable
+                style={[styles.searchBar, { backgroundColor: theme.bg }]}
+                onPress={() => router.push('/(app)/search')}>
                 <Search size={16} color={theme.neutral600} />
                 <TextInput
-                  value={query}
-                  onChangeText={setQuery}
+                  editable={false}
+                  pointerEvents="none"
                   placeholder="What needs fixing?"
                   placeholderTextColor={theme.neutral600}
                   style={[styles.searchInput, { color: theme.text }]}
                 />
-              </View>
+              </Pressable>
             </View>
 
             <ThemedText type="smallBold" style={styles.sectionTitle}>
@@ -155,23 +160,7 @@ export default function CategoryBrowseScreen() {
             </ThemedText>
           ) : null
         }
-        renderItem={({ item }) => (
-          <Pressable style={[styles.providerRow, { borderColor: theme.divider }]} onPress={() => openProvider(item)}>
-            <View style={[styles.providerPhoto, { backgroundColor: theme.neutral200 }]} />
-            <View style={{ flex: 1 }}>
-              <ThemedText style={styles.providerName}>{item.businessName}</ThemedText>
-              <ThemedText type="small" themeColor="textSecondary" style={styles.providerMeta}>
-                {[item.city, item.yearsExperience != null ? `${item.yearsExperience} yrs` : null]
-                  .filter(Boolean)
-                  .join(' · ')}
-              </ThemedText>
-              <View style={styles.providerTags}>
-                {item.verified && <Tag label="VERIFIED" variant="accent" />}
-                {item.fromPrice != null && <Tag label={`FROM $${item.fromPrice.toFixed(2)}`} variant="neutral" />}
-              </View>
-            </View>
-          </Pressable>
-        )}
+        renderItem={({ item }) => <ProviderListItem provider={item} onPress={() => openProvider(item)} />}
       />
 
       <View style={[styles.tabBar, { borderTopColor: theme.divider, paddingBottom: insets.bottom + 10 }]}>
@@ -179,11 +168,13 @@ export default function CategoryBrowseScreen() {
           <House size={20} color={theme.accent} />
           <ThemedText style={[styles.tabLabel, { color: theme.accent }]}>HOME</ThemedText>
         </View>
-        {/* Bookings/Chat/You have no screens yet - placeholders until those milestones land. */}
-        <View style={styles.tabItem}>
+        <Pressable
+          style={styles.tabItem}
+          onPress={() => router.push(me?.role === 'PROVIDER' ? '/(app)/provider-bookings' : '/(app)/bookings')}>
           <Calendar size={20} color={theme.neutral500} />
           <ThemedText style={[styles.tabLabel, { color: theme.neutral500 }]}>BOOKINGS</ThemedText>
-        </View>
+        </Pressable>
+        {/* Chat has no screen yet - placeholder until that milestone lands. */}
         <View style={styles.tabItem}>
           <MessageSquare size={20} color={theme.neutral500} />
           <ThemedText style={[styles.tabLabel, { color: theme.neutral500 }]}>CHAT</ThemedText>
@@ -279,30 +270,6 @@ const styles = StyleSheet.create({
   emptyText: {
     textAlign: 'center',
     paddingVertical: 20,
-  },
-  providerRow: {
-    flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 20,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    marginBottom: 14,
-  },
-  providerPhoto: {
-    width: 72,
-    height: 72,
-  },
-  providerName: {
-    fontFamily: 'Archivo_800ExtraBold',
-    fontSize: 16,
-  },
-  providerMeta: {
-    marginVertical: 2,
-    marginBottom: 8,
-  },
-  providerTags: {
-    flexDirection: 'row',
-    gap: 6,
   },
   tabBar: {
     flexDirection: 'row',

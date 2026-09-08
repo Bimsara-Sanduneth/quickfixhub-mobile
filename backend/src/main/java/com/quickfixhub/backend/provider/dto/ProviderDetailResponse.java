@@ -12,9 +12,13 @@ public record ProviderDetailResponse(
 		Integer yearsExperience,
 		String city,
 		boolean verified,
-		List<ProviderServiceResponse> services) {
+		List<ProviderServiceResponse> services,
+		// Null (not 0) averageRating means "no reviews yet".
+		Double averageRating,
+		long reviewCount) {
 
-	public static ProviderDetailResponse from(ProviderProfile profile, List<ProviderServiceResponse> services) {
+	public static ProviderDetailResponse from(ProviderProfile profile, List<ProviderServiceResponse> services,
+			Double averageRating, long reviewCount) {
 		return new ProviderDetailResponse(
 				profile.getId(),
 				profile.getBusinessName(),
@@ -22,6 +26,8 @@ public record ProviderDetailResponse(
 				profile.getYearsExperience(),
 				profile.getCity(),
 				profile.isVerified(),
-				services);
+				services,
+				averageRating,
+				reviewCount);
 	}
 }

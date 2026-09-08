@@ -39,4 +39,16 @@ final class ProviderProfileSpecifications {
 				? null
 				: cb.like(cb.lower(root.get("businessName")), "%" + q.toLowerCase() + "%");
 	}
+
+	static Specification<ProviderProfile> cityContains(String city) {
+		return (root, query, cb) -> (city == null || city.isBlank())
+				? null
+				: cb.like(cb.lower(root.get("city")), "%" + city.toLowerCase() + "%");
+	}
+
+	static Specification<ProviderProfile> verifiedOnly(Boolean verified) {
+		return (root, query, cb) -> (verified == null || !verified)
+				? null
+				: cb.isTrue(root.get("verified"));
+	}
 }
