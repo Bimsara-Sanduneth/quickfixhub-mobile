@@ -24,6 +24,19 @@ public record BookingResponse(
 		BigDecimal price,
 		String notes,
 		Instant createdAt,
+		// Null once the booking leaves REQUESTED (accepted/declined/expired) - the mobile app only
+		// needs this to run the accept-window countdown on the "request sent" screen.
+		Instant expiresAt,
+		Instant acceptedAt,
+		Instant enRouteAt,
+		Instant inProgressAt,
+		Instant completedAt,
+		Instant declinedAt,
+		Instant cancelledAt,
+		// True once the provider is EN_ROUTE - the point after which cancelling costs the flat
+		// call-out fee. No payment system exists yet to actually charge it; this only drives the
+		// warning shown in the cancellation dialog.
+		boolean cancellationFeeApplies,
 		// Whether this booking already has a review - lets the mobile app show/hide a "Leave a
 		// review" action without a separate lookup per booking. Always false outside of
 		// listMyBookings (a booking can't already be reviewed the moment it's created or
@@ -46,6 +59,14 @@ public record BookingResponse(
 				booking.getPriceAtBooking(),
 				booking.getNotes(),
 				booking.getCreatedAt(),
+				booking.getExpiresAt(),
+				booking.getAcceptedAt(),
+				booking.getEnRouteAt(),
+				booking.getInProgressAt(),
+				booking.getCompletedAt(),
+				booking.getDeclinedAt(),
+				booking.getCancelledAt(),
+				booking.getStatus() == BookingStatus.EN_ROUTE,
 				reviewed);
 	}
 }
