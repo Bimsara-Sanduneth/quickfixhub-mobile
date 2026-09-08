@@ -168,7 +168,9 @@ export default function CategoryBrowseScreen() {
           <House size={20} color={theme.accent} />
           <ThemedText style={[styles.tabLabel, { color: theme.accent }]}>HOME</ThemedText>
         </View>
-        <Pressable style={styles.tabItem} onPress={() => router.push('/(app)/bookings')}>
+        <Pressable
+          style={styles.tabItem}
+          onPress={() => router.push(me?.role === 'PROVIDER' ? '/(app)/provider-bookings' : '/(app)/bookings')}>
           <Calendar size={20} color={theme.neutral500} />
           <ThemedText style={[styles.tabLabel, { color: theme.neutral500 }]}>BOOKINGS</ThemedText>
         </Pressable>

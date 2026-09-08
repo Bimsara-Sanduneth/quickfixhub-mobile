@@ -11,6 +11,9 @@ public record BookingResponse(
 		UUID id,
 		UUID providerProfileId,
 		String providerBusinessName,
+		// Not needed for a customer's own bookings (they know who they are) but this DTO is
+		// shared with the provider-side listing, which does need it.
+		String customerName,
 		UUID serviceId,
 		String serviceName,
 		UUID addressId,
@@ -32,6 +35,7 @@ public record BookingResponse(
 				booking.getId(),
 				booking.getProviderProfile().getId(),
 				booking.getProviderProfile().getBusinessName(),
+				booking.getCustomer().getFullName(),
 				booking.getProviderService().getService().getId(),
 				booking.getProviderService().getService().getName(),
 				booking.getAddress().getId(),

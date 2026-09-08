@@ -1,5 +1,8 @@
 package com.quickfixhub.backend.provider;
 
+import com.quickfixhub.backend.booking.Booking;
+import com.quickfixhub.backend.booking.BookingRepository;
+import com.quickfixhub.backend.booking.dto.BookingResponse;
 import com.quickfixhub.backend.catalog.ServiceOffering;
 import com.quickfixhub.backend.catalog.ServiceOfferingRepository;
 import com.quickfixhub.backend.provider.dto.AddProviderServiceRequest;
@@ -20,7 +23,9 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 // The "provider onboarding" gap: registering with role=PROVIDER only ever set that flag on the
@@ -36,15 +41,17 @@ public class MyProviderProfileController {
 	private final ServiceOfferingRepository serviceOfferingRepository;
 	private final ReviewRepository reviewRepository;
 	private final UserRepository userRepository;
+	private final BookingRepository bookingRepository;
 
 	public MyProviderProfileController(ProviderProfileRepository providerProfileRepository,
 			ProviderServiceRepository providerServiceRepository, ServiceOfferingRepository serviceOfferingRepository,
-			ReviewRepository reviewRepository, UserRepository userRepository) {
+			ReviewRepository reviewRepository, UserRepository userRepository, BookingRepository bookingRepository) {
 		this.providerProfileRepository = providerProfileRepository;
 		this.providerServiceRepository = providerServiceRepository;
 		this.serviceOfferingRepository = serviceOfferingRepository;
 		this.reviewRepository = reviewRepository;
 		this.userRepository = userRepository;
+		this.bookingRepository = bookingRepository;
 	}
 
 	@GetMapping
@@ -82,6 +89,22 @@ public class MyProviderProfileController {
 
 		ProviderService providerService = new ProviderService(profile, service, request.price(), request.durationMinutes());
 		return ProviderServiceResponse.from(providerServiceRepository.save(providerService));
+	}
+
+	@GetMapping("/bookings")
+	public List<BookingResponse> listMyBookings(@AuthenticationPrincipal UUID userId) {
+		ProviderProfile profile = providerProfileRepository.findByUserId(userId)
+				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No provider profile yet"));
+		List<Booking> bookings = bookingRepository.findByProviderProfileIdOrderByScheduledAtDesc(profile.getId());
+		// "reviewed" isn't a concept the provider side acts on (only the customer who received the
+		// service can leave one), but it's part of the shared BookingResponse shape, so compute it
+		// properly rather than hardcoding it - same batched lookup BookingController's own
+		// listMyBookings uses.
+		Set<UUID> reviewedIds = new HashSet<>(
+				reviewRepository.findReviewedBookingIds(bookings.stream().map(Booking::getId).toList()));
+		return bookings.stream()
+				.map(b -> BookingResponse.from(b, reviewedIds.contains(b.getId())))
+				.toList();
 	}
 
 	private ProviderDetailResponse toDetailResponse(ProviderProfile profile) {
