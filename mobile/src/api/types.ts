@@ -132,6 +132,9 @@ export interface Booking {
   id: string;
   providerProfileId: string;
   providerBusinessName: string;
+  // Not meaningful on a customer's own bookings (they know who they are) - populated on the
+  // provider-side listing.
+  customerName: string;
   serviceId: string;
   serviceName: string;
   addressId: string;

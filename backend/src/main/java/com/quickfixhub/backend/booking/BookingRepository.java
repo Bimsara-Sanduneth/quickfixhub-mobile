@@ -13,4 +13,6 @@ public interface BookingRepository extends JpaRepository<Booking, UUID> {
 	// one extra query per association per row. Fine at this project's data volume; worth revisiting
 	// with an explicit JOIN FETCH query if a provider's booking list ever needs to scale up.
 	List<Booking> findByCustomerIdOrderByScheduledAtDesc(UUID customerId);
+
+	List<Booking> findByProviderProfileIdOrderByScheduledAtDesc(UUID providerProfileId);
 }
