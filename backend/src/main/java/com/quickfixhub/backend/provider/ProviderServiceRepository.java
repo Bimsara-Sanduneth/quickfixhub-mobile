@@ -10,6 +10,8 @@ import java.util.UUID;
 
 public interface ProviderServiceRepository extends JpaRepository<ProviderService, UUID> {
 
+	boolean existsByProviderProfileIdAndServiceId(UUID providerProfileId, UUID serviceId);
+
 	// Fetches the catalog service eagerly to avoid N+1 lookups when mapping to a response DTO.
 	@Query("SELECT ps FROM ProviderService ps JOIN FETCH ps.service WHERE ps.providerProfile.id = :providerProfileId")
 	List<ProviderService> findByProviderProfileId(@Param("providerProfileId") UUID providerProfileId);

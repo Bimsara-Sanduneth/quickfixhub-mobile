@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type PropsWith
 
 import * as authApi from '@/api/auth';
 import { setUnauthenticatedHandler } from '@/api/client';
-import type { LoginRequest, RegisterRequest } from '@/api/types';
+import type { LoginRequest, RegisterRequest, Role } from '@/api/types';
 
 import { clearTokens, getAccessToken, getRefreshToken, saveTokens } from './tokenStorage';
 
@@ -16,6 +16,10 @@ interface AuthContextValue {
   // authenticated user lands, so there's no race between this and the (auth) group's own
   // "authenticated -> redirect to /(app)" logic.
   justRegistered: boolean;
+  // The role chosen at registration (register.tsx always passes one) - lets Home route a
+  // fresh PROVIDER signup to the business-setup screen instead of the customer-oriented
+  // profile-completion one, without an extra /me round-trip just to learn the role.
+  justRegisteredRole: Role | null;
   login: (payload: LoginRequest) => Promise<void>;
   register: (payload: RegisterRequest) => Promise<void>;
   logout: () => Promise<void>;
@@ -27,6 +31,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: PropsWithChildren) {
   const [status, setStatus] = useState<AuthStatus>('loading');
   const [justRegistered, setJustRegistered] = useState(false);
+  const [justRegisteredRole, setJustRegisteredRole] = useState<Role | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,6 +54,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     () => ({
       status,
       justRegistered,
+      justRegisteredRole,
       async login(payload) {
         const tokens = await authApi.login(payload);
         await saveTokens(tokens);
@@ -58,6 +64,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         const tokens = await authApi.register(payload);
         await saveTokens(tokens);
         setJustRegistered(true);
+        setJustRegisteredRole(payload.role);
         setStatus('authenticated');
       },
       async logout() {
@@ -65,6 +72,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         await clearTokens();
         setStatus('unauthenticated');
         setJustRegistered(false);
+        setJustRegisteredRole(null);
         if (refreshToken) {
           // Best-effort server-side revoke; the client has already dropped its tokens either way.
           authApi.logout({ refreshToken }).catch(() => {});
@@ -72,9 +80,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
       },
       clearJustRegistered() {
         setJustRegistered(false);
+        setJustRegisteredRole(null);
       },
     }),
-    [status, justRegistered],
+    [status, justRegistered, justRegisteredRole],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
