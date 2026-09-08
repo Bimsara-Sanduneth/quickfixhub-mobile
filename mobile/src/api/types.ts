@@ -183,6 +183,52 @@ export interface CreateBookingRequest {
   notes?: string;
 }
 
+// Mocked payment ledger - no real gateway, see the backend's Payment entity. PAID happens
+// automatically the moment a booking is completed; PARTIALLY_REFUNDED/REFUNDED only ever follow
+// an admin refund action.
+export type PaymentStatus = 'PAID' | 'PARTIALLY_REFUNDED' | 'REFUNDED';
+
+export interface Payment {
+  id: string;
+  bookingId: string;
+  customerName: string;
+  providerBusinessName: string;
+  serviceName: string;
+  amount: number;
+  status: PaymentStatus;
+  method: string;
+  paidAt: string;
+  refundAmount: number | null;
+  refundReason: string | null;
+  refundedAt: string | null;
+}
+
+export interface RefundRequest {
+  amount: number;
+  reason: string;
+}
+
+export interface AdminOverview {
+  totalCustomers: number;
+  totalProviders: number;
+  verifiedProviders: number;
+  pendingVerification: number;
+  totalBookings: number;
+  completedBookings: number;
+  totalRevenue: number;
+  totalRefunded: number;
+}
+
+export interface AdminProvider {
+  id: string;
+  businessName: string;
+  ownerEmail: string;
+  bio: string | null;
+  yearsExperience: number | null;
+  city: string | null;
+  createdAt: string;
+}
+
 export interface Message {
   id: string;
   bookingId: string;

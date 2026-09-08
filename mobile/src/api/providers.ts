@@ -40,12 +40,30 @@ export async function updateMyAvailability(payload: UpdateAvailabilityRequest): 
   return data;
 }
 
+export async function listSavedProviders(): Promise<ProviderSummary[]> {
+  const { data } = await apiClient.get<ProviderSummary[]>('/me/saved-providers');
+  return data;
+}
+
+export async function saveProvider(providerId: string): Promise<void> {
+  await apiClient.put(`/me/saved-providers/${providerId}`);
+}
+
+export async function unsaveProvider(providerId: string): Promise<void> {
+  await apiClient.delete(`/me/saved-providers/${providerId}`);
+}
+
 export interface ProviderSearchParams {
   categoryId?: string;
   serviceId?: string;
   q?: string;
   city?: string;
   verified?: boolean;
+  // Radius discovery (2g) - when all three are given, results are filtered/sorted by distance
+  // from (lat, lng) instead of the default businessName ordering.
+  lat?: number;
+  lng?: number;
+  radiusKm?: number;
 }
 
 export async function searchProviders(params: ProviderSearchParams): Promise<Page<ProviderSummary>> {

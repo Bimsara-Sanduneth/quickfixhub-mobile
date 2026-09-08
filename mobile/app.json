@@ -34,7 +34,13 @@
         }
       ],
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "QuickFixHub uses your location to show nearby providers on the map."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

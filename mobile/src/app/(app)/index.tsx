@@ -52,7 +52,7 @@ function getGreeting(): string {
 export default function CategoryBrowseScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
-  const { logout, justRegistered, justRegisteredRole } = useAuth();
+  const { justRegistered, justRegisteredRole } = useAuth();
 
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: getCurrentUser, enabled: !justRegistered });
   const categories = useQuery({ queryKey: ['categories'], queryFn: listCategories, enabled: !justRegistered });
@@ -179,9 +179,7 @@ export default function CategoryBrowseScreen() {
           <MessageSquare size={20} color={theme.neutral500} />
           <ThemedText style={[styles.tabLabel, { color: theme.neutral500 }]}>CHAT</ThemedText>
         </View>
-        {/* Stands in for the real profile/settings screen (design 2q, not built yet) - logout
-            needs to be reachable from somewhere for now. */}
-        <Pressable style={styles.tabItem} onPress={logout}>
+        <Pressable style={styles.tabItem} onPress={() => router.push('/(app)/profile')}>
           <User size={20} color={theme.neutral500} />
           <ThemedText style={[styles.tabLabel, { color: theme.neutral500 }]}>YOU</ThemedText>
         </Pressable>

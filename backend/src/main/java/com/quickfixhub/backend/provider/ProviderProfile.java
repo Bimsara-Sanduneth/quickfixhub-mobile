@@ -120,6 +120,10 @@ public class ProviderProfile {
 		return verified;
 	}
 
+	public void setVerified(boolean verified) {
+		this.verified = verified;
+	}
+
 	public Instant getCreatedAt() {
 		return createdAt;
 	}

@@ -6,8 +6,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { extractErrorMessage } from '@/api/errors';
 import { listProviderReviews } from '@/api/reviews';
-import type { Review } from '@/api/types';
+import { REVIEW_TAG_LABEL, type Review, type ReviewTag } from '@/api/types';
 import { Divider } from '@/components/ds/divider';
+import { Tag } from '@/components/ds/tag';
 import { StarRating } from '@/components/star-rating';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -35,6 +36,13 @@ export default function ProviderReviewsScreen() {
           <ThemedText type="small" themeColor="textSecondary" style={styles.comment}>
             {item.comment}
           </ThemedText>
+        )}
+        {item.tags.length > 0 && (
+          <View style={styles.tagRow}>
+            {item.tags.map((tag) => (
+              <Tag key={tag} label={REVIEW_TAG_LABEL[tag as ReviewTag] ?? tag} variant="neutral" />
+            ))}
+          </View>
         )}
       </View>
     );
@@ -129,5 +137,11 @@ const styles = StyleSheet.create({
   },
   comment: {
     lineHeight: 18,
+  },
+  tagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
   },
 });

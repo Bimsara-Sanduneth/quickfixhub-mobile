@@ -16,7 +16,11 @@ public record ProviderSummaryResponse(
 		// Null (not 0) averageRating means "no reviews yet" - the mobile app shouldn't render a
 		// star rating for a provider that hasn't been reviewed.
 		Double averageRating,
-		long reviewCount) {
+		long reviewCount,
+		// Geocoded from the provider's city at profile-creation time (best-effort - null if
+		// geocoding failed or the provider never set a city). Powers the discovery map's pins.
+		Double latitude,
+		Double longitude) {
 
 	public static ProviderSummaryResponse from(ProviderProfile profile, BigDecimal fromPrice, Double averageRating, long reviewCount) {
 		return new ProviderSummaryResponse(
@@ -27,6 +31,8 @@ public record ProviderSummaryResponse(
 				profile.getYearsExperience(),
 				fromPrice,
 				averageRating,
-				reviewCount);
+				reviewCount,
+				profile.getLatitude(),
+				profile.getLongitude());
 	}
 }
