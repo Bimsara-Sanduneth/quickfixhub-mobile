@@ -71,6 +71,13 @@ export default function CategoryBrowseScreen() {
     return <Redirect href={justRegisteredRole === 'PROVIDER' ? '/(app)/provider-onboarding' : '/(app)/profile-completion'} />;
   }
 
+  // An admin has no use for the customer discovery Home screen (categories, "recommended for
+  // you", etc.) - self-registration as ADMIN is rejected by the backend, so this only ever
+  // matches the one seeded demo admin account.
+  if (me?.role === 'ADMIN') {
+    return <Redirect href="/(app)/admin" />;
+  }
+
   function openCategory(category: ServiceCategory) {
     router.push({
       pathname: '/(app)/categories/[categoryId]',

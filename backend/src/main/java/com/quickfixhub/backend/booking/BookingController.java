@@ -2,6 +2,7 @@ package com.quickfixhub.backend.booking;
 
 import com.quickfixhub.backend.booking.dto.BookingResponse;
 import com.quickfixhub.backend.booking.dto.CreateBookingRequest;
+import com.quickfixhub.backend.payment.PaymentService;
 import com.quickfixhub.backend.profile.Address;
 import com.quickfixhub.backend.profile.AddressRepository;
 import com.quickfixhub.backend.provider.ProviderProfile;
@@ -51,10 +52,12 @@ public class BookingController {
 	private final UserRepository userRepository;
 	private final ReviewRepository reviewRepository;
 	private final BookingExpiryService bookingExpiryService;
+	private final PaymentService paymentService;
 
 	public BookingController(BookingRepository bookingRepository, ProviderServiceRepository providerServiceRepository,
 			ProviderProfileRepository providerProfileRepository, AddressRepository addressRepository,
-			UserRepository userRepository, ReviewRepository reviewRepository, BookingExpiryService bookingExpiryService) {
+			UserRepository userRepository, ReviewRepository reviewRepository, BookingExpiryService bookingExpiryService,
+			PaymentService paymentService) {
 		this.bookingRepository = bookingRepository;
 		this.providerServiceRepository = providerServiceRepository;
 		this.providerProfileRepository = providerProfileRepository;
@@ -62,6 +65,7 @@ public class BookingController {
 		this.userRepository = userRepository;
 		this.reviewRepository = reviewRepository;
 		this.bookingExpiryService = bookingExpiryService;
+		this.paymentService = paymentService;
 	}
 
 	@PostMapping
@@ -173,7 +177,11 @@ public class BookingController {
 		}
 		booking.setStatus(BookingStatus.COMPLETED);
 		booking.setCompletedAt(Instant.now());
-		return BookingResponse.from(bookingRepository.save(booking), false);
+		booking = bookingRepository.save(booking);
+		// Mocked "charge" - see PaymentService. The booking's own IN_PROGRESS guard above already
+		// ensures this fires at most once per booking.
+		paymentService.recordPayment(booking);
+		return BookingResponse.from(booking, false);
 	}
 
 	// Shared by accept/decline/start-travel/start-job/complete: 404 (not 403) on a booking that

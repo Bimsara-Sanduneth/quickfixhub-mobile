@@ -42,6 +42,15 @@ public class ProviderProfile {
 	@Column
 	private String city;
 
+	// Geocoded from `city` at profile-creation time (best-effort, via GeocodingService) - city
+	// level precision only, no street address exists to geocode more precisely. Null if
+	// geocoding failed or no city was given; the discovery map just omits an ungeocoded provider.
+	@Column
+	private Double latitude;
+
+	@Column
+	private Double longitude;
+
 	// How far the provider is willing to travel for a job. Nullable - unset until the provider
 	// visits the availability screen (2t); no booking-eligibility logic reads this yet.
 	@Column(name = "service_radius_km")
@@ -106,6 +115,22 @@ public class ProviderProfile {
 
 	public String getCity() {
 		return city;
+	}
+
+	public Double getLatitude() {
+		return latitude;
+	}
+
+	public void setLatitude(Double latitude) {
+		this.latitude = latitude;
+	}
+
+	public Double getLongitude() {
+		return longitude;
+	}
+
+	public void setLongitude(Double longitude) {
+		this.longitude = longitude;
 	}
 
 	public Integer getServiceRadiusKm() {

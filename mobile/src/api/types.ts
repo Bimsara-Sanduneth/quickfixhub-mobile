@@ -98,6 +98,10 @@ export interface ProviderDetail {
   // Null (not 0) means no reviews yet - don't render a star rating in that case.
   averageRating: number | null;
   reviewCount: number;
+  // Geocoded from `city` when the provider set up their profile - null if that failed or no
+  // city was given.
+  latitude: number | null;
+  longitude: number | null;
 }
 
 export interface ProviderSummary {
@@ -111,12 +115,29 @@ export interface ProviderSummary {
   // Null (not 0) means no reviews yet - don't render a star rating in that case.
   averageRating: number | null;
   reviewCount: number;
+  latitude: number | null;
+  longitude: number | null;
 }
+
+// Fixed vocabulary of quick-select review chips (2p). The backend stores whatever strings are
+// sent, unvalidated against an enum - this list is the only place the vocabulary is defined.
+export const REVIEW_TAGS = ['ON_TIME', 'TIDY_WORK', 'GREAT_COMMUNICATION', 'WOULD_REBOOK', 'FAIR_PRICE', 'SKILLED'] as const;
+export type ReviewTag = (typeof REVIEW_TAGS)[number];
+
+export const REVIEW_TAG_LABEL: Record<ReviewTag, string> = {
+  ON_TIME: 'On time',
+  TIDY_WORK: 'Tidy work',
+  GREAT_COMMUNICATION: 'Great communication',
+  WOULD_REBOOK: 'Would rebook',
+  FAIR_PRICE: 'Fair price',
+  SKILLED: 'Skilled',
+};
 
 export interface Review {
   id: string;
   rating: number;
   comment: string | null;
+  tags: string[];
   reviewerFirstName: string;
   createdAt: string;
 }
@@ -124,6 +145,7 @@ export interface Review {
 export interface CreateReviewRequest {
   rating: number;
   comment?: string;
+  tags?: string[];
 }
 
 // REQUESTED -> ACCEPTED -> EN_ROUTE -> IN_PROGRESS -> COMPLETED is the happy path. DECLINED only
