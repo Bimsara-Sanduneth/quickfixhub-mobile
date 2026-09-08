@@ -42,6 +42,11 @@ public class ProviderProfile {
 	@Column
 	private String city;
 
+	// How far the provider is willing to travel for a job. Nullable - unset until the provider
+	// visits the availability screen (2t); no booking-eligibility logic reads this yet.
+	@Column(name = "service_radius_km")
+	private Integer serviceRadiusKm;
+
 	@Column(nullable = false)
 	private boolean verified = false;
 
@@ -101,6 +106,14 @@ public class ProviderProfile {
 
 	public String getCity() {
 		return city;
+	}
+
+	public Integer getServiceRadiusKm() {
+		return serviceRadiusKm;
+	}
+
+	public void setServiceRadiusKm(Integer serviceRadiusKm) {
+		this.serviceRadiusKm = serviceRadiusKm;
 	}
 
 	public boolean isVerified() {

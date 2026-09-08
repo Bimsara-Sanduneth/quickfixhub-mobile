@@ -195,3 +195,21 @@ export interface Message {
 export interface CreateMessageRequest {
   body: string;
 }
+
+// 0=Monday .. 6=Sunday, matching the backend's ISO-8601 day-of-week ordering.
+export interface AvailabilityDay {
+  dayOfWeek: number;
+  isOpen: boolean;
+  startTime: string | null; // "HH:mm"
+  endTime: string | null; // "HH:mm"
+}
+
+export interface Availability {
+  serviceRadiusKm: number | null;
+  days: AvailabilityDay[];
+}
+
+export interface UpdateAvailabilityRequest {
+  serviceRadiusKm?: number;
+  days: AvailabilityDay[];
+}

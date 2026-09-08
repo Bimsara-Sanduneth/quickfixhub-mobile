@@ -9,31 +9,12 @@ import { listMyBookings } from '@/api/bookings';
 import type { Booking, BookingStatus } from '@/api/types';
 import { CancelBookingDialog } from '@/components/cancel-booking-dialog';
 import { Divider } from '@/components/ds/divider';
-import { Tag, type TagVariant } from '@/components/ds/tag';
+import { Tag } from '@/components/ds/tag';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
+import { formatDateTime, minutesLeft, referenceCode, STATUS_LABEL, STATUS_TAG_VARIANT } from '@/utils/booking';
 import { formatCurrency } from '@/utils/currency';
-
-const STATUS_TAG_VARIANT: Record<BookingStatus, TagVariant> = {
-  REQUESTED: 'outline',
-  ACCEPTED: 'accent',
-  EN_ROUTE: 'accent',
-  IN_PROGRESS: 'accent',
-  COMPLETED: 'solid',
-  CANCELLED: 'neutral',
-  DECLINED: 'neutral',
-};
-
-const STATUS_LABEL: Record<BookingStatus, string> = {
-  REQUESTED: 'REQUESTED',
-  ACCEPTED: 'ACCEPTED',
-  EN_ROUTE: 'EN ROUTE',
-  IN_PROGRESS: 'IN PROGRESS',
-  COMPLETED: 'COMPLETED',
-  CANCELLED: 'CANCELLED',
-  DECLINED: 'DECLINED',
-};
 
 const TIMELINE_STEPS: { status: BookingStatus; label: string; at: (b: Booking) => string | null }[] = [
   { status: 'REQUESTED', label: 'Requested', at: (b) => b.createdAt },
@@ -42,19 +23,6 @@ const TIMELINE_STEPS: { status: BookingStatus; label: string; at: (b: Booking) =
   { status: 'IN_PROGRESS', label: 'In progress', at: (b) => b.inProgressAt },
   { status: 'COMPLETED', label: 'Completed', at: (b) => b.completedAt },
 ];
-
-function referenceCode(bookingId: string): string {
-  return `#QFH-${bookingId.slice(0, 8).toUpperCase()}`;
-}
-
-function formatDateTime(iso: string): string {
-  const date = new Date(iso);
-  return `${date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · ${date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
-}
-
-function minutesLeft(expiresAt: string): number {
-  return Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 60000));
-}
 
 export default function BookingDetailScreen() {
   const { bookingId } = useLocalSearchParams<{ bookingId: string }>();

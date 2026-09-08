@@ -8,38 +8,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { listMyBookings } from '@/api/bookings';
 import { extractErrorMessage } from '@/api/errors';
 import { createReview } from '@/api/reviews';
-import type { Booking, BookingStatus } from '@/api/types';
+import type { Booking } from '@/api/types';
 import { CancelBookingDialog } from '@/components/cancel-booking-dialog';
 import { Button } from '@/components/ds/button';
 import { Dialog } from '@/components/ds/dialog';
 import { Divider } from '@/components/ds/divider';
-import { Tag, type TagVariant } from '@/components/ds/tag';
+import { Tag } from '@/components/ds/tag';
 import { TextField } from '@/components/ds/text-field';
 import { StarRating } from '@/components/star-rating';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
+import { STATUS_LABEL, STATUS_TAG_VARIANT } from '@/utils/booking';
 import { formatCurrency } from '@/utils/currency';
-
-const STATUS_TAG_VARIANT: Record<BookingStatus, TagVariant> = {
-  REQUESTED: 'outline',
-  ACCEPTED: 'accent',
-  EN_ROUTE: 'accent',
-  IN_PROGRESS: 'accent',
-  COMPLETED: 'solid',
-  CANCELLED: 'neutral',
-  DECLINED: 'neutral',
-};
-
-const STATUS_LABEL: Record<BookingStatus, string> = {
-  REQUESTED: 'REQUESTED',
-  ACCEPTED: 'ACCEPTED',
-  EN_ROUTE: 'EN ROUTE',
-  IN_PROGRESS: 'IN PROGRESS',
-  COMPLETED: 'COMPLETED',
-  CANCELLED: 'CANCELLED',
-  DECLINED: 'DECLINED',
-};
 
 function formatSchedule(iso: string): string {
   const date = new Date(iso);
