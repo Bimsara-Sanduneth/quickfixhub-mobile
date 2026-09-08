@@ -167,3 +167,16 @@ export interface CreateBookingRequest {
   scheduledAt: string; // ISO instant
   notes?: string;
 }
+
+export interface Message {
+  id: string;
+  bookingId: string;
+  senderId: string;
+  senderName: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface CreateMessageRequest {
+  body: string;
+}
