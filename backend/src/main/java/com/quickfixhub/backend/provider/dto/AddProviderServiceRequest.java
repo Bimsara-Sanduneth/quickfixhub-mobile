@@ -10,6 +10,6 @@ import java.util.UUID;
 
 public record AddProviderServiceRequest(
 		@NotNull UUID serviceId,
-		@NotNull @DecimalMin(value = "0.0", inclusive = false) @Digits(integer = 8, fraction = 2) BigDecimal price,
+		@NotNull @DecimalMin(value = "2000.0", message = "Price must be at least Rs. 2,000") @Digits(integer = 8, fraction = 2) BigDecimal price,
 		@Min(1) Integer durationMinutes) {
 }

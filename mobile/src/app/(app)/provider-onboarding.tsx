@@ -19,6 +19,8 @@ import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
 import { formatCurrency } from '@/utils/currency';
 
+const MIN_SERVICE_PRICE = 2000;
+
 export default function ProviderOnboardingScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
@@ -76,7 +78,7 @@ export default function ProviderOnboardingScreen() {
   }
 
   const canCreateProfile = businessName.trim().length > 0;
-  const canAddService = !!serviceId && Number(price) > 0;
+  const canAddService = !!serviceId && Number(price) >= MIN_SERVICE_PRICE;
 
   return (
     <ThemedView style={styles.container}>
@@ -190,22 +192,27 @@ export default function ProviderOnboardingScreen() {
             )}
 
             {serviceId && (
-              <View style={styles.priceRow}>
-                <TextField
-                  label="Price (Rs.)"
-                  keyboardType="decimal-pad"
-                  value={price}
-                  onChangeText={setPrice}
-                  style={styles.priceField}
-                />
-                <TextField
-                  label="Duration (min)"
-                  keyboardType="number-pad"
-                  value={duration}
-                  onChangeText={setDuration}
-                  style={styles.priceField}
-                />
-              </View>
+              <>
+                <View style={styles.priceRow}>
+                  <TextField
+                    label="Price (Rs.)"
+                    keyboardType="decimal-pad"
+                    value={price}
+                    onChangeText={setPrice}
+                    style={styles.priceField}
+                  />
+                  <TextField
+                    label="Duration (min)"
+                    keyboardType="number-pad"
+                    value={duration}
+                    onChangeText={setDuration}
+                    style={styles.priceField}
+                  />
+                </View>
+                <ThemedText type="small" themeColor="textSecondary" style={styles.priceHint}>
+                  Minimum price is {formatCurrency(MIN_SERVICE_PRICE)}.
+                </ThemedText>
+              </>
             )}
 
             {addServiceMutation.isError && (
@@ -316,6 +323,10 @@ const styles = StyleSheet.create({
   },
   priceField: {
     flex: 1,
+  },
+  priceHint: {
+    marginTop: -8,
+    marginBottom: 16,
   },
   addServiceButton: {
     justifyContent: 'center',

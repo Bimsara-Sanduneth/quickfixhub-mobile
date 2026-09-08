@@ -1,5 +1,14 @@
 import { apiClient } from './client';
-import type { AddProviderServiceRequest, CreateProviderProfileRequest, Page, ProviderDetail, ProviderServiceItem, ProviderSummary } from './types';
+import type {
+  AddProviderServiceRequest,
+  Availability,
+  CreateProviderProfileRequest,
+  Page,
+  ProviderDetail,
+  ProviderServiceItem,
+  ProviderSummary,
+  UpdateAvailabilityRequest,
+} from './types';
 
 export async function getProvider(providerId: string): Promise<ProviderDetail> {
   const { data } = await apiClient.get<ProviderDetail>(`/providers/${providerId}`);
@@ -18,6 +27,16 @@ export async function createMyProviderProfile(payload: CreateProviderProfileRequ
 
 export async function addMyProviderService(payload: AddProviderServiceRequest): Promise<ProviderServiceItem> {
   const { data } = await apiClient.post<ProviderServiceItem>('/me/provider-profile/services', payload);
+  return data;
+}
+
+export async function getMyAvailability(): Promise<Availability> {
+  const { data } = await apiClient.get<Availability>('/me/provider-profile/availability');
+  return data;
+}
+
+export async function updateMyAvailability(payload: UpdateAvailabilityRequest): Promise<Availability> {
+  const { data } = await apiClient.put<Availability>('/me/provider-profile/availability', payload);
   return data;
 }
 
