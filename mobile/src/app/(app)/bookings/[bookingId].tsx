@@ -6,6 +6,7 @@ import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'reac
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { listMyBookings } from '@/api/bookings';
+import { getBookingPayment } from '@/api/payments';
 import { getProvider } from '@/api/providers';
 import type { Booking, BookingStatus } from '@/api/types';
 import { CancelBookingDialog } from '@/components/cancel-booking-dialog';
@@ -43,6 +44,13 @@ export default function BookingDetailScreen() {
     queryKey: ['providers', booking?.providerProfileId],
     queryFn: () => getProvider(booking!.providerProfileId),
     enabled: showMap,
+  });
+
+  // A Payment row only exists once a booking is COMPLETED (see the backend's PaymentService).
+  const payment = useQuery({
+    queryKey: ['bookings', bookingId, 'payment'],
+    queryFn: () => getBookingPayment(bookingId),
+    enabled: booking?.status === 'COMPLETED',
   });
 
   // Only REQUESTED bookings show a countdown, but the interval is harmless (and cheap) to leave
@@ -208,6 +216,37 @@ export default function BookingDetailScreen() {
           </ThemedText>
           <ThemedText type="smallBold">{formatCurrency(booking.price)}</ThemedText>
         </View>
+
+        {payment.data && (
+          <>
+            <ThemedText type="smallBold" style={styles.sectionLabel}>
+              Receipt
+            </ThemedText>
+            <View style={[styles.summaryRow, { borderBottomColor: theme.divider }]}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Paid
+              </ThemedText>
+              <ThemedText type="smallBold">{formatDateTime(payment.data.paidAt)}</ThemedText>
+            </View>
+            <View style={[styles.summaryRow, { borderBottomColor: theme.divider, borderBottomWidth: payment.data.refundAmount != null ? 1 : 0 }]}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Status
+              </ThemedText>
+              <Tag
+                label={payment.data.status.replace('_', ' ')}
+                variant={payment.data.status === 'PAID' ? 'accent' : 'neutral'}
+              />
+            </View>
+            {payment.data.refundAmount != null && (
+              <View style={[styles.summaryRow, { borderBottomColor: theme.divider, borderBottomWidth: 0 }]}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Refunded
+                </ThemedText>
+                <ThemedText type="smallBold">{formatCurrency(payment.data.refundAmount)}</ThemedText>
+              </View>
+            )}
+          </>
+        )}
 
         {booking.notes && (
           <>
