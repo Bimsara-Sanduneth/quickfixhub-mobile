@@ -1,28 +1,36 @@
 import { useQuery } from '@tanstack/react-query';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { ArrowLeft, MessageSquare, Phone } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { extractErrorMessage } from '@/api/errors';
 import { getProvider } from '@/api/providers';
+import { listProviderReviews } from '@/api/reviews';
 import type { ProviderServiceItem } from '@/api/types';
 import { Button } from '@/components/ds/button';
 import { Tag } from '@/components/ds/tag';
+import { StarRating } from '@/components/star-rating';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
+
+const REVIEWS_PREVIEW_COUNT = 3;
 
 export default function ProviderDetailScreen() {
   const { providerId } = useLocalSearchParams<{ providerId: string }>();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
-  const [showBookingNote, setShowBookingNote] = useState(false);
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['providers', providerId],
     queryFn: () => getProvider(providerId),
+    enabled: !!providerId,
+  });
+  const reviews = useQuery({
+    queryKey: ['providers', providerId, 'reviews'],
+    queryFn: () => listProviderReviews(providerId),
     enabled: !!providerId,
   });
 
@@ -74,6 +82,42 @@ export default function ProviderDetailScreen() {
     );
   }
 
+  const reviewsFooter = (
+    <View style={styles.reviewsSection}>
+      <View style={styles.reviewsHeadingRow}>
+        <ThemedText type="smallBold">Reviews {data.reviewCount > 0 ? `(${data.reviewCount})` : ''}</ThemedText>
+        {data.reviewCount > REVIEWS_PREVIEW_COUNT && (
+          <Pressable onPress={() => router.push({ pathname: '/(app)/providers/[providerId]/reviews', params: { providerId: data.id } })}>
+            <ThemedText type="small" style={{ color: theme.accent }}>
+              See all
+            </ThemedText>
+          </Pressable>
+        )}
+      </View>
+      {reviews.isPending ? (
+        <ActivityIndicator style={styles.sectionLoading} />
+      ) : reviews.data && reviews.data.content.length === 0 ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          No reviews yet.
+        </ThemedText>
+      ) : (
+        reviews.data?.content.slice(0, REVIEWS_PREVIEW_COUNT).map((review) => (
+          <View key={review.id} style={[styles.reviewRow, { borderColor: theme.divider }]}>
+            <View style={styles.reviewHeaderRow}>
+              <ThemedText type="smallBold">{review.reviewerFirstName}</ThemedText>
+              <StarRating rating={review.rating} size={12} />
+            </View>
+            {review.comment && (
+              <ThemedText type="small" themeColor="textSecondary" style={styles.reviewComment}>
+                {review.comment}
+              </ThemedText>
+            )}
+          </View>
+        ))
+      )}
+    </View>
+  );
+
   return (
     <ThemedView style={styles.container}>
       <Stack.Screen options={{ headerShown: false }} />
@@ -104,6 +148,14 @@ export default function ProviderDetailScreen() {
               <ThemedText style={styles.businessName}>{data.businessName}</ThemedText>
               <View style={styles.metaRow}>
                 {data.verified && <Tag label="VERIFIED" variant="accent" />}
+                {data.averageRating != null && (
+                  <View style={styles.ratingBadge}>
+                    <StarRating rating={data.averageRating} size={13} />
+                    <ThemedText type="small" themeColor="textSecondary">
+                      {data.averageRating.toFixed(1)} ({data.reviewCount})
+                    </ThemedText>
+                  </View>
+                )}
                 {data.city && (
                   <ThemedText type="small" themeColor="textSecondary">
                     {data.city}
@@ -149,14 +201,10 @@ export default function ProviderDetailScreen() {
           </ThemedText>
         }
         renderItem={renderService}
+        ListFooterComponent={reviewsFooter}
       />
 
       <View style={[styles.footer, { borderTopColor: theme.divider, paddingBottom: insets.bottom + 16 }]}>
-        {showBookingNote && (
-          <ThemedText type="small" themeColor="textSecondary" style={styles.bookingNote}>
-            Booking isn&rsquo;t available yet — that&rsquo;s a bigger feature landing separately.
-          </ThemedText>
-        )}
         <View style={styles.footerRow}>
           {fromPrice != null && (
             <View>
@@ -166,7 +214,12 @@ export default function ProviderDetailScreen() {
               <ThemedText style={styles.fromPrice}>${fromPrice.toFixed(2)}</ThemedText>
             </View>
           )}
-          <Button label="Request booking" style={styles.bookButton} onPress={() => setShowBookingNote(true)} />
+          <Button
+            label="Request booking"
+            style={styles.bookButton}
+            disabled={data.services.length === 0}
+            onPress={() => router.push({ pathname: '/(app)/bookings/new', params: { providerId: data.id } })}
+          />
         </View>
       </View>
     </ThemedView>
@@ -234,6 +287,11 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 12,
   },
+  ratingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
   statsRow: {
     flexDirection: 'row',
     marginHorizontal: 20,
@@ -282,14 +340,38 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_800ExtraBold',
     fontSize: 13,
   },
+  reviewsSection: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 8,
+  },
+  reviewsHeadingRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  sectionLoading: {
+    marginVertical: 12,
+  },
+  reviewRow: {
+    borderBottomWidth: 1,
+    paddingBottom: 10,
+    marginBottom: 10,
+  },
+  reviewHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  reviewComment: {
+    lineHeight: 18,
+  },
   footer: {
     borderTopWidth: 2,
     paddingHorizontal: 20,
     paddingTop: 12,
-  },
-  bookingNote: {
-    marginBottom: 8,
-    textAlign: 'center',
   },
   footerRow: {
     flexDirection: 'row',

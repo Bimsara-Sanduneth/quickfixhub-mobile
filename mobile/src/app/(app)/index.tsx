@@ -52,7 +52,7 @@ function getGreeting(): string {
 export default function CategoryBrowseScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
-  const { logout, justRegistered } = useAuth();
+  const { logout, justRegistered, justRegisteredRole } = useAuth();
 
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: getCurrentUser, enabled: !justRegistered });
   const categories = useQuery({ queryKey: ['categories'], queryFn: listCategories, enabled: !justRegistered });
@@ -62,11 +62,13 @@ export default function CategoryBrowseScreen() {
     enabled: !justRegistered,
   });
 
-  // A fresh registration routes through profile-completion once before landing here - decided
+  // A fresh registration routes through a one-time setup screen before landing here - decided
   // here (the group's actual entry point) rather than in (app)/_layout.tsx, so it doesn't race
-  // or block the Stack from ever rendering the profile-completion screen it redirects to.
+  // or block the Stack from ever rendering the screen it redirects to. Providers get their own
+  // business-profile setup instead of the customer-oriented address/avatar screen, since a
+  // provider signup with no provider_profile row is invisible to every customer-facing endpoint.
   if (justRegistered) {
-    return <Redirect href="/(app)/profile-completion" />;
+    return <Redirect href={justRegisteredRole === 'PROVIDER' ? '/(app)/provider-onboarding' : '/(app)/profile-completion'} />;
   }
 
   function openCategory(category: ServiceCategory) {
@@ -166,11 +168,11 @@ export default function CategoryBrowseScreen() {
           <House size={20} color={theme.accent} />
           <ThemedText style={[styles.tabLabel, { color: theme.accent }]}>HOME</ThemedText>
         </View>
-        {/* Bookings/Chat/You have no screens yet - placeholders until those milestones land. */}
-        <View style={styles.tabItem}>
+        <Pressable style={styles.tabItem} onPress={() => router.push('/(app)/bookings')}>
           <Calendar size={20} color={theme.neutral500} />
           <ThemedText style={[styles.tabLabel, { color: theme.neutral500 }]}>BOOKINGS</ThemedText>
-        </View>
+        </Pressable>
+        {/* Chat has no screen yet - placeholder until that milestone lands. */}
         <View style={styles.tabItem}>
           <MessageSquare size={20} color={theme.neutral500} />
           <ThemedText style={[styles.tabLabel, { color: theme.neutral500 }]}>CHAT</ThemedText>

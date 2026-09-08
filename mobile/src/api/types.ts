@@ -78,6 +78,9 @@ export interface CreateAddressRequest {
 }
 
 export interface ProviderServiceItem {
+  // The provider's own priced listing id - what a booking request references (a catalog
+  // serviceId alone doesn't say which provider's price/duration applies).
+  providerServiceId: string;
   serviceId: string;
   serviceName: string;
   price: number;
@@ -92,6 +95,9 @@ export interface ProviderDetail {
   city: string | null;
   verified: boolean;
   services: ProviderServiceItem[];
+  // Null (not 0) means no reviews yet - don't render a star rating in that case.
+  averageRating: number | null;
+  reviewCount: number;
 }
 
 export interface ProviderSummary {
@@ -102,4 +108,59 @@ export interface ProviderSummary {
   yearsExperience: number | null;
   // Lowest price among the provider's listed services; null if they haven't listed any.
   fromPrice: number | null;
+  // Null (not 0) means no reviews yet - don't render a star rating in that case.
+  averageRating: number | null;
+  reviewCount: number;
+}
+
+export interface Review {
+  id: string;
+  rating: number;
+  comment: string | null;
+  reviewerFirstName: string;
+  createdAt: string;
+}
+
+export interface CreateReviewRequest {
+  rating: number;
+  comment?: string;
+}
+
+export type BookingStatus = 'PENDING' | 'CONFIRMED' | 'DECLINED' | 'CANCELLED' | 'COMPLETED';
+
+export interface Booking {
+  id: string;
+  providerProfileId: string;
+  providerBusinessName: string;
+  serviceId: string;
+  serviceName: string;
+  addressId: string;
+  addressLabel: string;
+  addressText: string;
+  scheduledAt: string; // ISO instant
+  status: BookingStatus;
+  price: number;
+  notes: string | null;
+  createdAt: string;
+  reviewed: boolean;
+}
+
+export interface CreateProviderProfileRequest {
+  businessName: string;
+  bio?: string;
+  yearsExperience?: number;
+  city?: string;
+}
+
+export interface AddProviderServiceRequest {
+  serviceId: string;
+  price: number;
+  durationMinutes?: number;
+}
+
+export interface CreateBookingRequest {
+  providerServiceId: string;
+  addressId: string;
+  scheduledAt: string; // ISO instant
+  notes?: string;
 }

@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -41,6 +42,17 @@ public class GlobalExceptionHandler {
 		String expectedType = ex.getRequiredType() != null ? ex.getRequiredType().getSimpleName() : "the expected type";
 		String message = "Parameter '" + ex.getName() + "' must be " + expectedType;
 		return build(HttpStatus.BAD_REQUEST, message, request);
+	}
+
+	// A @PreAuthorize denial (AuthorizationDeniedException, a subtype of this) never reaches
+	// RestAccessDeniedHandler / ExceptionTranslationFilter at the servlet-filter layer - Spring
+	// MVC's own HandlerExceptionResolver chain (this @RestControllerAdvice included) resolves it
+	// first, inside DispatcherServlet.doDispatch(), so it never propagates out to the filter that
+	// handler is wired to. Without this, it falls through to the generic 500 branch below instead
+	// of a 403.
+	@ExceptionHandler(AccessDeniedException.class)
+	public ResponseEntity<ApiError> handleAccessDenied(AccessDeniedException ex, HttpServletRequest request) {
+		return build(HttpStatus.FORBIDDEN, "Access is denied", request);
 	}
 
 	// Covers built-in Spring exceptions (NoResourceFoundException, ResponseStatusException,

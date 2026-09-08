@@ -4,6 +4,7 @@ import type { ProviderSummary } from '@/api/types';
 import { useTheme } from '@/hooks/use-theme';
 
 import { Tag } from './ds/tag';
+import { StarRating } from './star-rating';
 import { ThemedText } from './themed-text';
 
 export type ProviderListItemProps = {
@@ -26,6 +27,14 @@ export function ProviderListItem({ provider, onPress }: ProviderListItemProps) {
             .filter(Boolean)
             .join(' · ')}
         </ThemedText>
+        {provider.averageRating != null && (
+          <View style={styles.ratingRow}>
+            <StarRating rating={provider.averageRating} size={12} />
+            <ThemedText type="small" themeColor="textSecondary">
+              {provider.averageRating.toFixed(1)} ({provider.reviewCount})
+            </ThemedText>
+          </View>
+        )}
         <View style={styles.tags}>
           {provider.verified && <Tag label="VERIFIED" variant="accent" />}
           {provider.fromPrice != null && <Tag label={`FROM $${provider.fromPrice.toFixed(2)}`} variant="neutral" />}
@@ -54,6 +63,12 @@ const styles = StyleSheet.create({
   },
   meta: {
     marginVertical: 2,
+    marginBottom: 6,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     marginBottom: 8,
   },
   tags: {

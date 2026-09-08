@@ -3,6 +3,7 @@ package com.quickfixhub.backend.provider;
 import com.quickfixhub.backend.provider.dto.ProviderDetailResponse;
 import com.quickfixhub.backend.provider.dto.ProviderServiceResponse;
 import com.quickfixhub.backend.provider.dto.ProviderSummaryResponse;
+import com.quickfixhub.backend.review.ReviewRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -32,11 +34,13 @@ public class ProviderController {
 
 	private final ProviderProfileRepository providerProfileRepository;
 	private final ProviderServiceRepository providerServiceRepository;
+	private final ReviewRepository reviewRepository;
 
 	public ProviderController(ProviderProfileRepository providerProfileRepository,
-			ProviderServiceRepository providerServiceRepository) {
+			ProviderServiceRepository providerServiceRepository, ReviewRepository reviewRepository) {
 		this.providerProfileRepository = providerProfileRepository;
 		this.providerServiceRepository = providerServiceRepository;
+		this.reviewRepository = reviewRepository;
 	}
 
 	@GetMapping
@@ -60,8 +64,16 @@ public class ProviderController {
 				.collect(Collectors.toMap(
 						ProviderServiceRepository.ProviderMinPrice::getProviderId,
 						ProviderServiceRepository.ProviderMinPrice::getMinPrice));
+		Map<UUID, ReviewRepository.ProviderRatingSummary> ratings = reviewRepository.findRatingSummariesByProviderProfileIds(providerIds)
+				.stream()
+				.collect(Collectors.toMap(ReviewRepository.ProviderRatingSummary::getProviderId, r -> r));
 
-		return page.map(profile -> ProviderSummaryResponse.from(profile, fromPrices.get(profile.getId())));
+		return page.map(profile -> {
+			ReviewRepository.ProviderRatingSummary rating = ratings.get(profile.getId());
+			Double averageRating = rating != null ? rating.getAverageRating() : null;
+			long reviewCount = rating != null ? rating.getReviewCount() : 0;
+			return ProviderSummaryResponse.from(profile, fromPrices.get(profile.getId()), averageRating, reviewCount);
+		});
 	}
 
 	@GetMapping("/{id}")
@@ -71,6 +83,13 @@ public class ProviderController {
 		var services = providerServiceRepository.findByProviderProfileId(id).stream()
 				.map(ProviderServiceResponse::from)
 				.toList();
-		return ProviderDetailResponse.from(profile, services);
+
+		// Reuses the same batched-rating-summary query as searchProviders, just with a
+		// single-element id list, rather than duplicating a near-identical aggregate query.
+		var ratings = reviewRepository.findRatingSummariesByProviderProfileIds(List.of(id));
+		Double averageRating = ratings.isEmpty() ? null : ratings.get(0).getAverageRating();
+		long reviewCount = ratings.isEmpty() ? 0 : ratings.get(0).getReviewCount();
+
+		return ProviderDetailResponse.from(profile, services, averageRating, reviewCount);
 	}
 }

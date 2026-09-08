@@ -12,17 +12,21 @@ public record ProviderSummaryResponse(
 		boolean verified,
 		Integer yearsExperience,
 		// The lowest price among the provider's listed services; null if they haven't listed any.
-		// No rating/review count here - there's no reviews system yet, and this endpoint won't
-		// fabricate one.
-		BigDecimal fromPrice) {
+		BigDecimal fromPrice,
+		// Null (not 0) averageRating means "no reviews yet" - the mobile app shouldn't render a
+		// star rating for a provider that hasn't been reviewed.
+		Double averageRating,
+		long reviewCount) {
 
-	public static ProviderSummaryResponse from(ProviderProfile profile, BigDecimal fromPrice) {
+	public static ProviderSummaryResponse from(ProviderProfile profile, BigDecimal fromPrice, Double averageRating, long reviewCount) {
 		return new ProviderSummaryResponse(
 				profile.getId(),
 				profile.getBusinessName(),
 				profile.getCity(),
 				profile.isVerified(),
 				profile.getYearsExperience(),
-				fromPrice);
+				fromPrice,
+				averageRating,
+				reviewCount);
 	}
 }
