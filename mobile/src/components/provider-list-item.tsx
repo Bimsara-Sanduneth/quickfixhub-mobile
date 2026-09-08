@@ -2,6 +2,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 
 import type { ProviderSummary } from '@/api/types';
 import { useTheme } from '@/hooks/use-theme';
+import { formatCurrency } from '@/utils/currency';
 
 import { Tag } from './ds/tag';
 import { StarRating } from './star-rating';
@@ -37,7 +38,7 @@ export function ProviderListItem({ provider, onPress }: ProviderListItemProps) {
         )}
         <View style={styles.tags}>
           {provider.verified && <Tag label="VERIFIED" variant="accent" />}
-          {provider.fromPrice != null && <Tag label={`FROM $${provider.fromPrice.toFixed(2)}`} variant="neutral" />}
+          {provider.fromPrice != null && <Tag label={`FROM ${formatCurrency(provider.fromPrice)}`} variant="neutral" />}
         </View>
       </View>
     </Pressable>

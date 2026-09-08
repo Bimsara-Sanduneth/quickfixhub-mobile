@@ -23,16 +23,23 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.Instant;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
 // Customer-side actions (create/list/cancel) are scoped to the caller's own customer_id, same
-// IDOR-avoidance shape as AddressController. Provider-side actions (confirm/decline/complete) are
-// scoped to the caller's own provider profile the same way - see resolveOwnedByProvider. The
-// provider's own booking *listing* lives on MyProviderProfileController instead of here, since
-// it's naturally "things scoped to my provider profile" rather than a booking-lifecycle action.
+// IDOR-avoidance shape as AddressController. Provider-side actions (accept/decline/start-travel/
+// start-job/complete) are scoped to the caller's own provider profile the same way - see
+// resolveOwnedByProvider. The provider's own booking *listing* lives on
+// MyProviderProfileController instead of here, since it's naturally "things scoped to my provider
+// profile" rather than a booking-lifecycle action.
+//
+// Lifecycle: REQUESTED -[accept]-> ACCEPTED -[start-travel]-> EN_ROUTE -[start-job]-> IN_PROGRESS
+// -[complete]-> COMPLETED. REQUESTED can also go to DECLINED (explicitly, or auto-expired - see
+// BookingExpiryService). REQUESTED/ACCEPTED/EN_ROUTE can be CANCELLED by the customer; once
+// IN_PROGRESS the job can no longer be cancelled, only completed.
 @RestController
 @RequestMapping("/bookings")
 public class BookingController {
@@ -43,16 +50,18 @@ public class BookingController {
 	private final AddressRepository addressRepository;
 	private final UserRepository userRepository;
 	private final ReviewRepository reviewRepository;
+	private final BookingExpiryService bookingExpiryService;
 
 	public BookingController(BookingRepository bookingRepository, ProviderServiceRepository providerServiceRepository,
 			ProviderProfileRepository providerProfileRepository, AddressRepository addressRepository,
-			UserRepository userRepository, ReviewRepository reviewRepository) {
+			UserRepository userRepository, ReviewRepository reviewRepository, BookingExpiryService bookingExpiryService) {
 		this.bookingRepository = bookingRepository;
 		this.providerServiceRepository = providerServiceRepository;
 		this.providerProfileRepository = providerProfileRepository;
 		this.addressRepository = addressRepository;
 		this.userRepository = userRepository;
 		this.reviewRepository = reviewRepository;
+		this.bookingExpiryService = bookingExpiryService;
 	}
 
 	@PostMapping
@@ -87,7 +96,7 @@ public class BookingController {
 
 	@GetMapping
 	public List<BookingResponse> listMyBookings(@AuthenticationPrincipal UUID userId) {
-		List<Booking> bookings = bookingRepository.findByCustomerIdOrderByScheduledAtDesc(userId);
+		List<Booking> bookings = bookingExpiryService.expireIfNeeded(bookingRepository.findByCustomerIdOrderByScheduledAtDesc(userId));
 		Set<UUID> reviewedIds = new HashSet<>(
 				reviewRepository.findReviewedBookingIds(bookings.stream().map(Booking::getId).toList()));
 		return bookings.stream()
@@ -100,47 +109,76 @@ public class BookingController {
 		Booking booking = bookingRepository.findById(id)
 				.filter(b -> b.getCustomer().getId().equals(userId))
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Booking not found"));
+		booking = bookingExpiryService.expireIfNeeded(booking);
 
-		if (booking.getStatus() != BookingStatus.PENDING && booking.getStatus() != BookingStatus.CONFIRMED) {
-			throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending or confirmed bookings can be cancelled");
+		if (booking.getStatus() != BookingStatus.REQUESTED && booking.getStatus() != BookingStatus.ACCEPTED
+				&& booking.getStatus() != BookingStatus.EN_ROUTE) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT,
+					"Only a requested, accepted or en-route booking can be cancelled");
 		}
 		booking.setStatus(BookingStatus.CANCELLED);
+		booking.setCancelledAt(Instant.now());
 		return BookingResponse.from(bookingRepository.save(booking), false);
 	}
 
-	@PatchMapping("/{id}/confirm")
-	public BookingResponse confirmBooking(@AuthenticationPrincipal UUID userId, @PathVariable UUID id) {
-		Booking booking = resolveOwnedByProvider(userId, id);
-		if (booking.getStatus() != BookingStatus.PENDING) {
-			throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending bookings can be confirmed");
+	@PatchMapping("/{id}/accept")
+	public BookingResponse acceptBooking(@AuthenticationPrincipal UUID userId, @PathVariable UUID id) {
+		Booking booking = bookingExpiryService.expireIfNeeded(resolveOwnedByProvider(userId, id));
+		if (booking.getStatus() != BookingStatus.REQUESTED) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT, "Only a requested booking can be accepted");
 		}
-		booking.setStatus(BookingStatus.CONFIRMED);
+		booking.setStatus(BookingStatus.ACCEPTED);
+		booking.setAcceptedAt(Instant.now());
 		return BookingResponse.from(bookingRepository.save(booking), false);
 	}
 
 	@PatchMapping("/{id}/decline")
 	public BookingResponse declineBooking(@AuthenticationPrincipal UUID userId, @PathVariable UUID id) {
-		Booking booking = resolveOwnedByProvider(userId, id);
-		if (booking.getStatus() != BookingStatus.PENDING) {
-			throw new ResponseStatusException(HttpStatus.CONFLICT, "Only pending bookings can be declined");
+		Booking booking = bookingExpiryService.expireIfNeeded(resolveOwnedByProvider(userId, id));
+		if (booking.getStatus() != BookingStatus.REQUESTED) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT, "Only a requested booking can be declined");
 		}
 		booking.setStatus(BookingStatus.DECLINED);
+		booking.setDeclinedAt(Instant.now());
+		return BookingResponse.from(bookingRepository.save(booking), false);
+	}
+
+	@PatchMapping("/{id}/start-travel")
+	public BookingResponse startTravel(@AuthenticationPrincipal UUID userId, @PathVariable UUID id) {
+		Booking booking = resolveOwnedByProvider(userId, id);
+		if (booking.getStatus() != BookingStatus.ACCEPTED) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT, "Only an accepted booking can start travel");
+		}
+		booking.setStatus(BookingStatus.EN_ROUTE);
+		booking.setEnRouteAt(Instant.now());
+		return BookingResponse.from(bookingRepository.save(booking), false);
+	}
+
+	@PatchMapping("/{id}/start-job")
+	public BookingResponse startJob(@AuthenticationPrincipal UUID userId, @PathVariable UUID id) {
+		Booking booking = resolveOwnedByProvider(userId, id);
+		if (booking.getStatus() != BookingStatus.EN_ROUTE) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT, "Only an en-route booking can be started");
+		}
+		booking.setStatus(BookingStatus.IN_PROGRESS);
+		booking.setInProgressAt(Instant.now());
 		return BookingResponse.from(bookingRepository.save(booking), false);
 	}
 
 	@PatchMapping("/{id}/complete")
 	public BookingResponse completeBooking(@AuthenticationPrincipal UUID userId, @PathVariable UUID id) {
 		Booking booking = resolveOwnedByProvider(userId, id);
-		if (booking.getStatus() != BookingStatus.CONFIRMED) {
-			throw new ResponseStatusException(HttpStatus.CONFLICT, "Only confirmed bookings can be completed");
+		if (booking.getStatus() != BookingStatus.IN_PROGRESS) {
+			throw new ResponseStatusException(HttpStatus.CONFLICT, "Only an in-progress booking can be completed");
 		}
 		booking.setStatus(BookingStatus.COMPLETED);
+		booking.setCompletedAt(Instant.now());
 		return BookingResponse.from(bookingRepository.save(booking), false);
 	}
 
-	// Shared by confirm/decline/complete: 404 (not 403) on a booking that exists but isn't
-	// against the caller's own provider profile, same "don't confirm the id belongs to someone
-	// else" reasoning as the customer-side address/booking lookups above.
+	// Shared by accept/decline/start-travel/start-job/complete: 404 (not 403) on a booking that
+	// exists but isn't against the caller's own provider profile, same "don't confirm the id
+	// belongs to someone else" reasoning as the customer-side address/booking lookups above.
 	private Booking resolveOwnedByProvider(UUID userId, UUID bookingId) {
 		ProviderProfile providerProfile = providerProfileRepository.findByUserId(userId)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Booking not found"));

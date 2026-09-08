@@ -17,6 +17,7 @@ import { TextField } from '@/components/ds/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
+import { formatCurrency } from '@/utils/currency';
 
 export default function ProviderOnboardingScreen() {
   const insets = useSafeAreaInsets();
@@ -141,7 +142,7 @@ export default function ProviderOnboardingScreen() {
             {addedServices.map((service) => (
               <View key={service.providerServiceId} style={[styles.serviceRow, { borderColor: theme.divider }]}>
                 <ThemedText style={styles.serviceName}>{service.serviceName}</ThemedText>
-                <ThemedText style={styles.servicePrice}>${service.price.toFixed(2)}</ThemedText>
+                <ThemedText style={styles.servicePrice}>{formatCurrency(service.price)}</ThemedText>
               </View>
             ))}
 
@@ -191,7 +192,7 @@ export default function ProviderOnboardingScreen() {
             {serviceId && (
               <View style={styles.priceRow}>
                 <TextField
-                  label="Price ($)"
+                  label="Price (Rs.)"
                   keyboardType="decimal-pad"
                   value={price}
                   onChangeText={setPrice}

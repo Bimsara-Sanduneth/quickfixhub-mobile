@@ -15,6 +15,7 @@ import { StarRating } from '@/components/star-rating';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
+import { formatCurrency } from '@/utils/currency';
 
 const REVIEWS_PREVIEW_COUNT = 3;
 
@@ -77,7 +78,7 @@ export default function ProviderDetailScreen() {
     return (
       <View style={[styles.serviceRow, { borderColor: theme.divider }]}>
         <ThemedText style={styles.serviceName}>{item.serviceName}</ThemedText>
-        <ThemedText style={styles.servicePrice}>${item.price.toFixed(2)}</ThemedText>
+        <ThemedText style={styles.servicePrice}>{formatCurrency(item.price)}</ThemedText>
       </View>
     );
   }
@@ -211,7 +212,7 @@ export default function ProviderDetailScreen() {
               <ThemedText type="small" themeColor="textSecondary" style={styles.fromLabel}>
                 FROM
               </ThemedText>
-              <ThemedText style={styles.fromPrice}>${fromPrice.toFixed(2)}</ThemedText>
+              <ThemedText style={styles.fromPrice}>{formatCurrency(fromPrice)}</ThemedText>
             </View>
           )}
           <Button

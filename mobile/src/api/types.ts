@@ -126,7 +126,10 @@ export interface CreateReviewRequest {
   comment?: string;
 }
 
-export type BookingStatus = 'PENDING' | 'CONFIRMED' | 'DECLINED' | 'CANCELLED' | 'COMPLETED';
+// REQUESTED -> ACCEPTED -> EN_ROUTE -> IN_PROGRESS -> COMPLETED is the happy path. DECLINED only
+// ever follows REQUESTED (provider declined, or the 30-minute accept window expired unanswered);
+// CANCELLED can follow REQUESTED, ACCEPTED or EN_ROUTE but never IN_PROGRESS or later.
+export type BookingStatus = 'REQUESTED' | 'ACCEPTED' | 'EN_ROUTE' | 'IN_PROGRESS' | 'COMPLETED' | 'DECLINED' | 'CANCELLED';
 
 export interface Booking {
   id: string;
@@ -145,6 +148,18 @@ export interface Booking {
   price: number;
   notes: string | null;
   createdAt: string;
+  // Null once the booking leaves REQUESTED (accepted/declined/expired) - only meaningful for
+  // running the accept-window countdown while still REQUESTED.
+  expiresAt: string | null;
+  acceptedAt: string | null;
+  enRouteAt: string | null;
+  inProgressAt: string | null;
+  completedAt: string | null;
+  declinedAt: string | null;
+  cancelledAt: string | null;
+  // True once the provider is EN_ROUTE - the point after which cancelling costs the flat
+  // call-out fee (no real charge yet, just what drives the warning in the cancel dialog).
+  cancellationFeeApplies: boolean;
   reviewed: boolean;
 }
 
@@ -166,4 +181,17 @@ export interface CreateBookingRequest {
   addressId: string;
   scheduledAt: string; // ISO instant
   notes?: string;
+}
+
+export interface Message {
+  id: string;
+  bookingId: string;
+  senderId: string;
+  senderName: string;
+  body: string;
+  createdAt: string;
+}
+
+export interface CreateMessageRequest {
+  body: string;
 }

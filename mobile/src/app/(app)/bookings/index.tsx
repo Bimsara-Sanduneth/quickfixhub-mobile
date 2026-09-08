@@ -1,14 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, Stack } from 'expo-router';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, MessageSquare } from 'lucide-react-native';
 import { useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { cancelBooking, listMyBookings } from '@/api/bookings';
+import { listMyBookings } from '@/api/bookings';
 import { extractErrorMessage } from '@/api/errors';
 import { createReview } from '@/api/reviews';
 import type { Booking, BookingStatus } from '@/api/types';
+import { CancelBookingDialog } from '@/components/cancel-booking-dialog';
 import { Button } from '@/components/ds/button';
 import { Dialog } from '@/components/ds/dialog';
 import { Divider } from '@/components/ds/divider';
@@ -18,13 +19,26 @@ import { StarRating } from '@/components/star-rating';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
+import { formatCurrency } from '@/utils/currency';
 
 const STATUS_TAG_VARIANT: Record<BookingStatus, TagVariant> = {
-  PENDING: 'outline',
-  CONFIRMED: 'accent',
+  REQUESTED: 'outline',
+  ACCEPTED: 'accent',
+  EN_ROUTE: 'accent',
+  IN_PROGRESS: 'accent',
   COMPLETED: 'solid',
   CANCELLED: 'neutral',
   DECLINED: 'neutral',
+};
+
+const STATUS_LABEL: Record<BookingStatus, string> = {
+  REQUESTED: 'REQUESTED',
+  ACCEPTED: 'ACCEPTED',
+  EN_ROUTE: 'EN ROUTE',
+  IN_PROGRESS: 'IN PROGRESS',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+  DECLINED: 'DECLINED',
 };
 
 function formatSchedule(iso: string): string {
@@ -44,14 +58,6 @@ export default function MyBookingsScreen() {
   const { data, isPending, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['bookings'],
     queryFn: listMyBookings,
-  });
-
-  const cancelMutation = useMutation({
-    mutationFn: (id: string) => cancelBooking(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bookings'] });
-      setCancelTarget(null);
-    },
   });
 
   const reviewMutation = useMutation({
@@ -76,14 +82,25 @@ export default function MyBookingsScreen() {
     setReviewComment('');
   }
 
+  function openChat(booking: Booking) {
+    router.push({
+      pathname: '/(app)/chat/[bookingId]',
+      params: { bookingId: booking.id, otherPartyName: booking.providerBusinessName },
+    });
+  }
+
+  function openDetail(booking: Booking) {
+    router.push({ pathname: '/(app)/bookings/[bookingId]', params: { bookingId: booking.id } });
+  }
+
   function renderBooking({ item }: { item: Booking }) {
-    const cancellable = item.status === 'PENDING' || item.status === 'CONFIRMED';
+    const cancellable = item.status === 'REQUESTED' || item.status === 'ACCEPTED' || item.status === 'EN_ROUTE';
     const reviewable = item.status === 'COMPLETED' && !item.reviewed;
     return (
-      <View style={[styles.row, { borderColor: theme.divider }]}>
+      <Pressable style={[styles.row, { borderColor: theme.divider }]} onPress={() => openDetail(item)}>
         <View style={styles.rowTop}>
           <ThemedText style={styles.providerName}>{item.providerBusinessName}</ThemedText>
-          <Tag label={item.status} variant={STATUS_TAG_VARIANT[item.status]} />
+          <Tag label={STATUS_LABEL[item.status]} variant={STATUS_TAG_VARIANT[item.status]} />
         </View>
         <ThemedText type="small" themeColor="textSecondary">
           {item.serviceName}
@@ -92,23 +109,28 @@ export default function MyBookingsScreen() {
           {formatSchedule(item.scheduledAt)} · {item.addressLabel}
         </ThemedText>
         <View style={styles.rowBottom}>
-          <ThemedText style={styles.price}>${item.price.toFixed(2)}</ThemedText>
-          {cancellable && (
-            <Pressable onPress={() => setCancelTarget(item)} hitSlop={6}>
-              <ThemedText type="small" style={{ color: theme.accent }}>
-                Cancel
-              </ThemedText>
+          <ThemedText style={styles.price}>{formatCurrency(item.price)}</ThemedText>
+          <View style={styles.rowActions}>
+            <Pressable onPress={() => openChat(item)} hitSlop={6}>
+              <MessageSquare size={16} color={theme.text} />
             </Pressable>
-          )}
-          {reviewable && (
-            <Pressable onPress={() => openReviewDialog(item)} hitSlop={6}>
-              <ThemedText type="small" style={{ color: theme.accent }}>
-                Leave a review
-              </ThemedText>
-            </Pressable>
-          )}
+            {cancellable && (
+              <Pressable onPress={() => setCancelTarget(item)} hitSlop={6}>
+                <ThemedText type="small" style={{ color: theme.accent }}>
+                  Cancel
+                </ThemedText>
+              </Pressable>
+            )}
+            {reviewable && (
+              <Pressable onPress={() => openReviewDialog(item)} hitSlop={6}>
+                <ThemedText type="small" style={{ color: theme.accent }}>
+                  Leave a review
+                </ThemedText>
+              </Pressable>
+            )}
+          </View>
         </View>
-      </View>
+      </Pressable>
     );
   }
 
@@ -151,22 +173,7 @@ export default function MyBookingsScreen() {
         />
       )}
 
-      <Dialog
-        visible={!!cancelTarget}
-        title="Cancel booking?"
-        body={cancelTarget ? `This cancels your booking with ${cancelTarget.providerBusinessName}.` : undefined}
-        onRequestClose={() => setCancelTarget(null)}
-        actions={
-          <>
-            <Button label="Keep it" variant="ghost" onPress={() => setCancelTarget(null)} />
-            <Button
-              label="Cancel booking"
-              loading={cancelMutation.isPending}
-              onPress={() => cancelTarget && cancelMutation.mutate(cancelTarget.id)}
-            />
-          </>
-        }
-      />
+      <CancelBookingDialog booking={cancelTarget} onRequestClose={() => setCancelTarget(null)} />
 
       <Dialog
         visible={!!reviewTarget}
@@ -260,6 +267,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginTop: 4,
+  },
+  rowActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
   },
   price: {
     fontFamily: 'Archivo_800ExtraBold',
