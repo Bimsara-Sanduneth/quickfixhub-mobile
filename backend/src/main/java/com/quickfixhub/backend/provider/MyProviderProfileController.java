@@ -1,6 +1,7 @@
 package com.quickfixhub.backend.provider;
 
 import com.quickfixhub.backend.booking.Booking;
+import com.quickfixhub.backend.booking.BookingExpiryService;
 import com.quickfixhub.backend.booking.BookingRepository;
 import com.quickfixhub.backend.booking.dto.BookingResponse;
 import com.quickfixhub.backend.catalog.ServiceOffering;
@@ -42,16 +43,19 @@ public class MyProviderProfileController {
 	private final ReviewRepository reviewRepository;
 	private final UserRepository userRepository;
 	private final BookingRepository bookingRepository;
+	private final BookingExpiryService bookingExpiryService;
 
 	public MyProviderProfileController(ProviderProfileRepository providerProfileRepository,
 			ProviderServiceRepository providerServiceRepository, ServiceOfferingRepository serviceOfferingRepository,
-			ReviewRepository reviewRepository, UserRepository userRepository, BookingRepository bookingRepository) {
+			ReviewRepository reviewRepository, UserRepository userRepository, BookingRepository bookingRepository,
+			BookingExpiryService bookingExpiryService) {
 		this.providerProfileRepository = providerProfileRepository;
 		this.providerServiceRepository = providerServiceRepository;
 		this.serviceOfferingRepository = serviceOfferingRepository;
 		this.reviewRepository = reviewRepository;
 		this.userRepository = userRepository;
 		this.bookingRepository = bookingRepository;
+		this.bookingExpiryService = bookingExpiryService;
 	}
 
 	@GetMapping
@@ -95,7 +99,8 @@ public class MyProviderProfileController {
 	public List<BookingResponse> listMyBookings(@AuthenticationPrincipal UUID userId) {
 		ProviderProfile profile = providerProfileRepository.findByUserId(userId)
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No provider profile yet"));
-		List<Booking> bookings = bookingRepository.findByProviderProfileIdOrderByScheduledAtDesc(profile.getId());
+		List<Booking> bookings = bookingExpiryService.expireIfNeeded(
+				bookingRepository.findByProviderProfileIdOrderByScheduledAtDesc(profile.getId()));
 		// "reviewed" isn't a concept the provider side acts on (only the customer who received the
 		// service can leave one), but it's part of the shared BookingResponse shape, so compute it
 		// properly rather than hardcoding it - same batched lookup BookingController's own

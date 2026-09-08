@@ -21,13 +21,23 @@ export async function listProviderBookings(): Promise<Booking[]> {
   return data;
 }
 
-export async function confirmBooking(id: string): Promise<Booking> {
-  const { data } = await apiClient.patch<Booking>(`/bookings/${id}/confirm`);
+export async function acceptBooking(id: string): Promise<Booking> {
+  const { data } = await apiClient.patch<Booking>(`/bookings/${id}/accept`);
   return data;
 }
 
 export async function declineBooking(id: string): Promise<Booking> {
   const { data } = await apiClient.patch<Booking>(`/bookings/${id}/decline`);
+  return data;
+}
+
+export async function startTravelBooking(id: string): Promise<Booking> {
+  const { data } = await apiClient.patch<Booking>(`/bookings/${id}/start-travel`);
+  return data;
+}
+
+export async function startJobBooking(id: string): Promise<Booking> {
+  const { data } = await apiClient.patch<Booking>(`/bookings/${id}/start-job`);
   return data;
 }
 

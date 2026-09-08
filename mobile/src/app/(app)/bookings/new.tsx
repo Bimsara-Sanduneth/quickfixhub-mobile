@@ -17,6 +17,7 @@ import { TextField } from '@/components/ds/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
+import { formatCurrency } from '@/utils/currency';
 
 const DAYS_AHEAD = 14;
 const SLOT_HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
@@ -94,9 +95,9 @@ export default function NewBookingScreen() {
         notes: notes.trim() || undefined,
       });
     },
-    onSuccess: () => {
+    onSuccess: (booking) => {
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
-      router.replace('/(app)/bookings');
+      router.replace({ pathname: '/(app)/bookings/[bookingId]', params: { bookingId: booking.id } });
     },
     onError: (e) => setError(extractErrorMessage(e)),
   });
@@ -119,7 +120,7 @@ export default function NewBookingScreen() {
             </ThemedText>
           )}
         </View>
-        <ThemedText style={styles.optionPrice}>${item.price.toFixed(2)}</ThemedText>
+        <ThemedText style={styles.optionPrice}>{formatCurrency(item.price)}</ThemedText>
       </Pressable>
     );
   }
