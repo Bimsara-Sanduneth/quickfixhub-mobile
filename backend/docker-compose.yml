@@ -27,6 +27,18 @@ services:
       timeout: 5s
       retries: 5
 
+  # Local SMTP sink - the backend sends real mail to this on localhost:1025, and every message
+  # is viewable at http://localhost:8025 instead of going anywhere real. Swap SMTP_* env vars
+  # for a real provider in staging/prod (see .env.example).
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "${SMTP_PORT:-1025}:1025"
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+
 volumes:
   postgres-data:
   redis-data:

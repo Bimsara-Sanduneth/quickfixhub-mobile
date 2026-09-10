@@ -1,9 +1,11 @@
 package com.quickfixhub.backend.auth;
 
 import com.quickfixhub.backend.auth.dto.AuthResponse;
+import com.quickfixhub.backend.auth.dto.ForgotPasswordRequest;
 import com.quickfixhub.backend.auth.dto.LoginRequest;
 import com.quickfixhub.backend.auth.dto.RefreshRequest;
 import com.quickfixhub.backend.auth.dto.RegisterRequest;
+import com.quickfixhub.backend.auth.dto.ResetPasswordRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -44,6 +46,19 @@ public class AuthController {
 	public ResponseEntity<Void> logout(@Valid @RequestBody RefreshRequest request) {
 		authService.logout(request);
 		return ResponseEntity.noContent().build();
+	}
+
+	// Always 204, whether or not the email is registered - see AuthService.forgotPassword.
+	@PostMapping("/forgot-password")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
+		authService.forgotPassword(request);
+	}
+
+	@PostMapping("/reset-password")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	public void resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+		authService.resetPassword(request);
 	}
 
 	// TODO: once a reverse proxy/load balancer sits in front (see AWS deployment in README),
