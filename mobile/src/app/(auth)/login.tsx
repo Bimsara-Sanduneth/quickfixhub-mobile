@@ -20,7 +20,6 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [showForgotNote, setShowForgotNote] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -79,10 +78,10 @@ export default function LoginScreen() {
           }
         />
 
-        <Pressable onPress={() => setShowForgotNote(true)} style={styles.forgotRow}>
-          <ThemedText style={[styles.forgotText, { color: showForgotNote ? theme.textSecondary : theme.accent700 }]}>
-            {showForgotNote ? "Password reset isn't available yet — contact support." : 'Forgot password?'}
-          </ThemedText>
+        <Pressable
+          onPress={() => router.push({ pathname: '/(auth)/forgot-password', params: email.trim() ? { email: email.trim() } : {} })}
+          style={styles.forgotRow}>
+          <ThemedText style={[styles.forgotText, { color: theme.accent700 }]}>Forgot password?</ThemedText>
         </Pressable>
 
         {error && (
