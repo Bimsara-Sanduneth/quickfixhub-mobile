@@ -20,3 +20,13 @@ export async function markOnboardingSeen(): Promise<void> {
   }
   await SecureStore.setItemAsync(SEEN_KEY, 'true');
 }
+
+// Clears the "already seen" flag so the intro slides show again on next launch. Only wired to a
+// __DEV__-only control on the Profile screen - there's no product reason to re-show onboarding.
+export async function resetOnboarding(): Promise<void> {
+  if (isWeb) {
+    webMemoryFlag = false;
+    return;
+  }
+  await SecureStore.deleteItemAsync(SEEN_KEY);
+}

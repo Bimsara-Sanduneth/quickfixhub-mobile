@@ -1,4 +1,4 @@
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 
 import { ThemedText } from './themed-text';
@@ -102,6 +102,19 @@ function buildMapHtml(props: ProviderMapProps): string {
 
 export function ProviderMap(props: ProviderMapProps) {
   const { onMarkerPress, style } = props;
+
+  // react-native-webview has no web implementation at all (it renders its own "does not support
+  // this platform" error) - the web preview is a convenience for this project, not a first-class
+  // target, so this just degrades gracefully rather than surfacing that raw error.
+  if (Platform.OS === 'web') {
+    return (
+      <View style={[styles.fallback, style]}>
+        <ThemedText type="small" themeColor="textSecondary">
+          Map isn&rsquo;t available in the web preview - try Expo Go on a phone.
+        </ThemedText>
+      </View>
+    );
+  }
 
   if (!API_KEY || API_KEY === 'replace-me') {
     return (

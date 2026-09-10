@@ -35,3 +35,12 @@ export function formatDateTime(iso: string): string {
 export function minutesLeft(expiresAt: string): number {
   return Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 60000));
 }
+
+// "27:14" style live countdown for the provider dashboard's request cards - precise to the
+// second, unlike minutesLeft's coarser "X min left" used elsewhere.
+export function countdownClock(expiresAt: string): string {
+  const totalSeconds = Math.max(0, Math.floor((new Date(expiresAt).getTime() - Date.now()) / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}

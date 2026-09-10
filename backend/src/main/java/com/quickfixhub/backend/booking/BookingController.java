@@ -2,6 +2,8 @@ package com.quickfixhub.backend.booking;
 
 import com.quickfixhub.backend.booking.dto.BookingResponse;
 import com.quickfixhub.backend.booking.dto.CreateBookingRequest;
+import com.quickfixhub.backend.notification.NotificationService;
+import com.quickfixhub.backend.notification.NotificationType;
 import com.quickfixhub.backend.payment.PaymentService;
 import com.quickfixhub.backend.profile.Address;
 import com.quickfixhub.backend.profile.AddressRepository;
@@ -53,11 +55,12 @@ public class BookingController {
 	private final ReviewRepository reviewRepository;
 	private final BookingExpiryService bookingExpiryService;
 	private final PaymentService paymentService;
+	private final NotificationService notificationService;
 
 	public BookingController(BookingRepository bookingRepository, ProviderServiceRepository providerServiceRepository,
 			ProviderProfileRepository providerProfileRepository, AddressRepository addressRepository,
 			UserRepository userRepository, ReviewRepository reviewRepository, BookingExpiryService bookingExpiryService,
-			PaymentService paymentService) {
+			PaymentService paymentService, NotificationService notificationService) {
 		this.bookingRepository = bookingRepository;
 		this.providerServiceRepository = providerServiceRepository;
 		this.providerProfileRepository = providerProfileRepository;
@@ -66,6 +69,7 @@ public class BookingController {
 		this.reviewRepository = reviewRepository;
 		this.bookingExpiryService = bookingExpiryService;
 		this.paymentService = paymentService;
+		this.notificationService = notificationService;
 	}
 
 	@PostMapping
@@ -94,8 +98,13 @@ public class BookingController {
 				request.scheduledAt(),
 				providerService.getPrice(),
 				request.notes());
+		booking = bookingRepository.save(booking);
 
-		return BookingResponse.from(bookingRepository.save(booking), false);
+		notificationService.notify(providerService.getProviderProfile().getUser(), NotificationType.BOOKING_REQUESTED,
+				"New booking request",
+				customer.getFullName() + " wants " + providerService.getService().getName(), booking.getId());
+
+		return BookingResponse.from(booking, false);
 	}
 
 	@GetMapping
@@ -122,7 +131,14 @@ public class BookingController {
 		}
 		booking.setStatus(BookingStatus.CANCELLED);
 		booking.setCancelledAt(Instant.now());
-		return BookingResponse.from(bookingRepository.save(booking), false);
+		booking = bookingRepository.save(booking);
+
+		notificationService.notify(booking.getProviderProfile().getUser(), NotificationType.BOOKING_CANCELLED,
+				"Booking cancelled",
+				booking.getCustomer().getFullName() + " cancelled their " + booking.getProviderService().getService().getName() + " booking",
+				booking.getId());
+
+		return BookingResponse.from(booking, false);
 	}
 
 	@PatchMapping("/{id}/accept")
@@ -133,7 +149,14 @@ public class BookingController {
 		}
 		booking.setStatus(BookingStatus.ACCEPTED);
 		booking.setAcceptedAt(Instant.now());
-		return BookingResponse.from(bookingRepository.save(booking), false);
+		booking = bookingRepository.save(booking);
+
+		notificationService.notify(booking.getCustomer(), NotificationType.BOOKING_ACCEPTED,
+				"Booking accepted",
+				booking.getProviderProfile().getBusinessName() + " accepted your " + booking.getProviderService().getService().getName() + " request",
+				booking.getId());
+
+		return BookingResponse.from(booking, false);
 	}
 
 	@PatchMapping("/{id}/decline")
@@ -144,7 +167,14 @@ public class BookingController {
 		}
 		booking.setStatus(BookingStatus.DECLINED);
 		booking.setDeclinedAt(Instant.now());
-		return BookingResponse.from(bookingRepository.save(booking), false);
+		booking = bookingRepository.save(booking);
+
+		notificationService.notify(booking.getCustomer(), NotificationType.BOOKING_DECLINED,
+				"Booking declined",
+				booking.getProviderProfile().getBusinessName() + " can't take your " + booking.getProviderService().getService().getName() + " request",
+				booking.getId());
+
+		return BookingResponse.from(booking, false);
 	}
 
 	@PatchMapping("/{id}/start-travel")
@@ -155,7 +185,13 @@ public class BookingController {
 		}
 		booking.setStatus(BookingStatus.EN_ROUTE);
 		booking.setEnRouteAt(Instant.now());
-		return BookingResponse.from(bookingRepository.save(booking), false);
+		booking = bookingRepository.save(booking);
+
+		notificationService.notify(booking.getCustomer(), NotificationType.BOOKING_EN_ROUTE,
+				"Provider on the way",
+				booking.getProviderProfile().getBusinessName() + " is on the way", booking.getId());
+
+		return BookingResponse.from(booking, false);
 	}
 
 	@PatchMapping("/{id}/start-job")
@@ -166,7 +202,14 @@ public class BookingController {
 		}
 		booking.setStatus(BookingStatus.IN_PROGRESS);
 		booking.setInProgressAt(Instant.now());
-		return BookingResponse.from(bookingRepository.save(booking), false);
+		booking = bookingRepository.save(booking);
+
+		notificationService.notify(booking.getCustomer(), NotificationType.BOOKING_IN_PROGRESS,
+				"Job started",
+				booking.getProviderProfile().getBusinessName() + " started your " + booking.getProviderService().getService().getName() + " job",
+				booking.getId());
+
+		return BookingResponse.from(booking, false);
 	}
 
 	@PatchMapping("/{id}/complete")
@@ -181,6 +224,12 @@ public class BookingController {
 		// Mocked "charge" - see PaymentService. The booking's own IN_PROGRESS guard above already
 		// ensures this fires at most once per booking.
 		paymentService.recordPayment(booking);
+
+		notificationService.notify(booking.getCustomer(), NotificationType.BOOKING_COMPLETED,
+				"Job completed",
+				booking.getProviderProfile().getBusinessName() + " marked your " + booking.getProviderService().getService().getName() + " job complete - leave a review",
+				booking.getId());
+
 		return BookingResponse.from(booking, false);
 	}
 

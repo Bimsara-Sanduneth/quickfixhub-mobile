@@ -3,6 +3,8 @@ package com.quickfixhub.backend.provider;
 import com.quickfixhub.backend.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -56,8 +58,23 @@ public class ProviderProfile {
 	@Column(name = "service_radius_km")
 	private Integer serviceRadiusKm;
 
+	// Kept in sync with verificationStatus (true iff APPROVED) by setVerificationStatus - existing
+	// queries (search's verifiedOnly filter, the "Verified" badge, admin's overview stats) all
+	// read this bare boolean and don't need a third REJECTED state to make sense of.
 	@Column(nullable = false)
 	private boolean verified = false;
+
+	@Enumerated(EnumType.STRING)
+	@Column(name = "verification_status", nullable = false)
+	private VerificationStatus verificationStatus = VerificationStatus.PENDING;
+
+	// Set alongside a reject/request-docs decision, shown to the provider; cleared on approval.
+	@Column(name = "provider_message", columnDefinition = "TEXT")
+	private String providerMessage;
+
+	// Admin-only scratchpad - never serialized into a provider-facing response.
+	@Column(name = "internal_note", columnDefinition = "TEXT")
+	private String internalNote;
 
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
@@ -147,6 +164,32 @@ public class ProviderProfile {
 
 	public void setVerified(boolean verified) {
 		this.verified = verified;
+	}
+
+	public VerificationStatus getVerificationStatus() {
+		return verificationStatus;
+	}
+
+	// The one place `verified` is set from now on - keeps the two fields from ever disagreeing.
+	public void setVerificationStatus(VerificationStatus verificationStatus) {
+		this.verificationStatus = verificationStatus;
+		this.verified = verificationStatus == VerificationStatus.APPROVED;
+	}
+
+	public String getProviderMessage() {
+		return providerMessage;
+	}
+
+	public void setProviderMessage(String providerMessage) {
+		this.providerMessage = providerMessage;
+	}
+
+	public String getInternalNote() {
+		return internalNote;
+	}
+
+	public void setInternalNote(String internalNote) {
+		this.internalNote = internalNote;
 	}
 
 	public Instant getCreatedAt() {

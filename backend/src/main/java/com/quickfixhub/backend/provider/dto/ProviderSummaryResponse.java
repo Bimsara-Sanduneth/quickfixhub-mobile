@@ -20,7 +20,11 @@ public record ProviderSummaryResponse(
 		// Geocoded from the provider's city at profile-creation time (best-effort - null if
 		// geocoding failed or the provider never set a city). Powers the discovery map's pins.
 		Double latitude,
-		Double longitude) {
+		Double longitude,
+		// A provider "is" its owning user - the profile photo shown on a provider's public
+		// listing is that person's own account photo, not a separate business-logo concept.
+		String photoDataUri,
+		String coverPhotoDataUri) {
 
 	public static ProviderSummaryResponse from(ProviderProfile profile, BigDecimal fromPrice, Double averageRating, long reviewCount) {
 		return new ProviderSummaryResponse(
@@ -33,6 +37,8 @@ public record ProviderSummaryResponse(
 				averageRating,
 				reviewCount,
 				profile.getLatitude(),
-				profile.getLongitude());
+				profile.getLongitude(),
+				profile.getUser().getPhotoDataUri(),
+				profile.getUser().getCoverPhotoDataUri());
 	}
 }

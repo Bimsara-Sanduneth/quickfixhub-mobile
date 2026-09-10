@@ -1,5 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import * as ImagePicker from 'expo-image-picker';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { Bell, Home, MapPin, Plus } from 'lucide-react-native';
 import { useState } from 'react';
@@ -8,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { createAddress, listAddresses } from '@/api/addresses';
 import { extractErrorMessage } from '@/api/errors';
+import { updateMyPhoto } from '@/api/me';
 import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/ds/button';
 import { Dialog } from '@/components/ds/dialog';
@@ -16,6 +16,7 @@ import { TextField } from '@/components/ds/text-field';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
+import { pickAndEncodePhoto } from '@/utils/photo';
 
 export default function ProfileCompletionScreen() {
   const insets = useSafeAreaInsets();
@@ -23,7 +24,6 @@ export default function ProfileCompletionScreen() {
   const queryClient = useQueryClient();
   const { clearJustRegistered } = useAuth();
 
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [dialogVisible, setDialogVisible] = useState(false);
   const [label, setLabel] = useState('');
   const [addressText, setAddressText] = useState('');
@@ -32,13 +32,15 @@ export default function ProfileCompletionScreen() {
 
   const { data: addresses } = useQuery({ queryKey: ['addresses'], queryFn: listAddresses });
 
+  const photoMutation = useMutation({
+    mutationFn: updateMyPhoto,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['me'] }),
+  });
+
   async function pickAvatar() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) return;
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.8 });
-    if (!result.canceled && result.assets[0]) {
-      // Preview only for now - uploading to storage is a separate media milestone.
-      setAvatarUri(result.assets[0].uri);
+    const dataUri = await pickAndEncodePhoto({ aspect: [1, 1], maxWidth: 512 });
+    if (dataUri) {
+      photoMutation.mutate(dataUri);
     }
   }
 
@@ -79,13 +81,18 @@ export default function ProfileCompletionScreen() {
 
         <View style={styles.avatarRow}>
           <View style={[styles.avatar, { backgroundColor: theme.neutral200 }]}>
-            {avatarUri && <Image source={{ uri: avatarUri }} style={styles.avatarImage} />}
+            {photoMutation.data?.photoDataUri && <Image source={{ uri: photoMutation.data.photoDataUri }} style={styles.avatarImage} />}
           </View>
           <View>
-            <Button label="Upload photo" variant="secondary" onPress={pickAvatar} />
+            <Button label="Upload photo" variant="secondary" loading={photoMutation.isPending} onPress={pickAvatar} />
             <ThemedText type="small" themeColor="textSecondary" style={styles.avatarHint}>
               JPG or PNG, max 5 MB
             </ThemedText>
+            {photoMutation.isError && (
+              <ThemedText type="small" style={{ color: theme.accent, marginTop: 4 }}>
+                {extractErrorMessage(photoMutation.error)}
+              </ThemedText>
+            )}
           </View>
         </View>
 

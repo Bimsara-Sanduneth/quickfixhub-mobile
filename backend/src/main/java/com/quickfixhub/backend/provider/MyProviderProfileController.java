@@ -9,9 +9,13 @@ import com.quickfixhub.backend.catalog.ServiceOfferingRepository;
 import com.quickfixhub.backend.geo.GeocodingService;
 import com.quickfixhub.backend.provider.dto.AddProviderServiceRequest;
 import com.quickfixhub.backend.provider.dto.CreateProviderProfileRequest;
+import com.quickfixhub.backend.provider.dto.MyVerificationResponse;
 import com.quickfixhub.backend.provider.dto.ProviderDetailResponse;
+import com.quickfixhub.backend.provider.dto.ProviderDocumentResponse;
 import com.quickfixhub.backend.provider.dto.ProviderServiceResponse;
+import com.quickfixhub.backend.provider.dto.UploadDocumentRequest;
 import com.quickfixhub.backend.review.ReviewRepository;
+import com.quickfixhub.backend.user.User;
 import com.quickfixhub.backend.user.UserRepository;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -19,6 +23,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -41,6 +46,7 @@ public class MyProviderProfileController {
 	private final ProviderProfileRepository providerProfileRepository;
 	private final ProviderServiceRepository providerServiceRepository;
 	private final ServiceOfferingRepository serviceOfferingRepository;
+	private final ProviderDocumentRepository providerDocumentRepository;
 	private final ReviewRepository reviewRepository;
 	private final UserRepository userRepository;
 	private final BookingRepository bookingRepository;
@@ -49,11 +55,13 @@ public class MyProviderProfileController {
 
 	public MyProviderProfileController(ProviderProfileRepository providerProfileRepository,
 			ProviderServiceRepository providerServiceRepository, ServiceOfferingRepository serviceOfferingRepository,
-			ReviewRepository reviewRepository, UserRepository userRepository, BookingRepository bookingRepository,
+			ProviderDocumentRepository providerDocumentRepository, ReviewRepository reviewRepository,
+			UserRepository userRepository, BookingRepository bookingRepository,
 			BookingExpiryService bookingExpiryService, GeocodingService geocodingService) {
 		this.providerProfileRepository = providerProfileRepository;
 		this.providerServiceRepository = providerServiceRepository;
 		this.serviceOfferingRepository = serviceOfferingRepository;
+		this.providerDocumentRepository = providerDocumentRepository;
 		this.reviewRepository = reviewRepository;
 		this.userRepository = userRepository;
 		this.bookingRepository = bookingRepository;
@@ -76,7 +84,14 @@ public class MyProviderProfileController {
 		if (providerProfileRepository.findByUserId(userId).isPresent()) {
 			throw new ResponseStatusException(HttpStatus.CONFLICT, "Provider profile already exists");
 		}
-		ProviderProfile profile = new ProviderProfile(userRepository.getReferenceById(userId), request.businessName(),
+		// A real (not getReferenceById-proxy) User - toDetailResponse() now needs
+		// user.getPhotoDataUri()/getCoverPhotoDataUri() (added alongside the profile-photo
+		// feature), and a lazy proxy can't satisfy that outside a session (open-in-view is
+		// disabled). Same LazyInitializationException shape already hit and fixed in
+		// BookingController.createBooking and MessageController.sendMessage.
+		User user = userRepository.findById(userId)
+				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
+		ProviderProfile profile = new ProviderProfile(user, request.businessName(),
 				request.bio(), request.yearsExperience(), request.city());
 		// Best-effort - a geocoding failure (network, no match) never blocks profile creation,
 		// it just leaves the provider off the discovery map (2g) until fixed some other way.
@@ -102,6 +117,35 @@ public class MyProviderProfileController {
 
 		ProviderService providerService = new ProviderService(profile, service, request.price(), request.durationMinutes());
 		return ProviderServiceResponse.from(providerServiceRepository.save(providerService));
+	}
+
+	@GetMapping("/verification")
+	@PreAuthorize("hasRole('PROVIDER')")
+	public MyVerificationResponse getMyVerification(@AuthenticationPrincipal UUID userId) {
+		ProviderProfile profile = providerProfileRepository.findByUserId(userId)
+				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No provider profile yet"));
+		List<ProviderDocumentResponse> documents = providerDocumentRepository
+				.findByProviderProfileIdOrderByDocumentType(profile.getId()).stream()
+				.map(ProviderDocumentResponse::from)
+				.toList();
+		return new MyVerificationResponse(profile.getVerificationStatus(), profile.getProviderMessage(), documents);
+	}
+
+	// Upsert by document type - a re-upload (e.g. after a rejection) replaces the existing row and
+	// resets it to PENDING rather than accumulating old submissions.
+	@PutMapping("/documents")
+	@PreAuthorize("hasRole('PROVIDER')")
+	public ProviderDocumentResponse uploadDocument(@AuthenticationPrincipal UUID userId,
+			@Valid @RequestBody UploadDocumentRequest request) {
+		ProviderProfile profile = providerProfileRepository.findByUserId(userId)
+				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No provider profile yet"));
+		ProviderDocument document = providerDocumentRepository
+				.findByProviderProfileIdAndDocumentType(profile.getId(), request.documentType())
+				.orElseGet(() -> new ProviderDocument(profile, request.documentType(), request.fileDataUri()));
+		document.setFileDataUri(request.fileDataUri());
+		document.setStatus(DocumentStatus.PENDING);
+		document.setReviewNote(null);
+		return ProviderDocumentResponse.from(providerDocumentRepository.save(document));
 	}
 
 	@GetMapping("/bookings")

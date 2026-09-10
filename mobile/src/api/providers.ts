@@ -3,8 +3,11 @@ import type {
   AddProviderServiceRequest,
   Availability,
   CreateProviderProfileRequest,
+  DocumentType,
+  MyVerification,
   Page,
   ProviderDetail,
+  ProviderDocument,
   ProviderServiceItem,
   ProviderSummary,
   UpdateAvailabilityRequest,
@@ -37,6 +40,16 @@ export async function getMyAvailability(): Promise<Availability> {
 
 export async function updateMyAvailability(payload: UpdateAvailabilityRequest): Promise<Availability> {
   const { data } = await apiClient.put<Availability>('/me/provider-profile/availability', payload);
+  return data;
+}
+
+export async function getMyVerification(): Promise<MyVerification> {
+  const { data } = await apiClient.get<MyVerification>('/me/provider-profile/verification');
+  return data;
+}
+
+export async function uploadMyDocument(documentType: DocumentType, fileDataUri: string): Promise<ProviderDocument> {
+  const { data } = await apiClient.put<ProviderDocument>('/me/provider-profile/documents', { documentType, fileDataUri });
   return data;
 }
 

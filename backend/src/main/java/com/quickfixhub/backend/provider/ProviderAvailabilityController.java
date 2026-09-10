@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -44,8 +45,13 @@ public class ProviderAvailabilityController {
 		return new AvailabilityResponse(profile.getServiceRadiusKm(), days);
 	}
 
+	// The delete-then-insert below is a "replace all 7 rows" operation, not two independent writes
+	// - without an explicit transaction, deleteByProviderProfileId (a derived bulk-delete query)
+	// has no active EntityManager transaction to run in and throws
+	// InvalidDataAccessApiUsageException immediately, before ever reaching the inserts.
 	@PutMapping
 	@PreAuthorize("hasRole('PROVIDER')")
+	@Transactional
 	public AvailabilityResponse updateAvailability(@AuthenticationPrincipal UUID userId,
 			@Valid @RequestBody UpdateAvailabilityRequest request) {
 		ProviderProfile profile = requireProfile(userId);
@@ -64,6 +70,11 @@ public class ProviderAvailabilityController {
 		providerProfileRepository.save(profile);
 
 		availabilityRepository.deleteByProviderProfileId(profile.getId());
+		// Hibernate queues writes and flushes them in a fixed order - inserts before deletes,
+		// regardless of the order they were issued in code - so without forcing the delete to
+		// hit the database now, the inserts below would run first and collide with the old rows
+		// on (provider_profile_id, day_of_week), which is exactly what happened on a second save.
+		availabilityRepository.flush();
 		List<ProviderAvailability> rows = request.days().stream()
 				.map(day -> new ProviderAvailability(profile, day.dayOfWeek(), day.isOpen(), day.startTime(), day.endTime()))
 				.toList();

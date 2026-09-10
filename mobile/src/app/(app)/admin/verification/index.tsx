@@ -1,16 +1,25 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { router, Stack } from 'expo-router';
-import { ArrowLeft, Check } from 'lucide-react-native';
+import { ArrowLeft, ChevronRight } from 'lucide-react-native';
+import { useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { listPendingProviders, verifyProvider } from '@/api/admin';
-import type { AdminProvider } from '@/api/types';
-import { Button } from '@/components/ds/button';
+import { listProvidersByStatus } from '@/api/admin';
+import type { AdminProvider, VerificationStatus } from '@/api/types';
 import { Divider } from '@/components/ds/divider';
+import { Tag, type TagVariant } from '@/components/ds/tag';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
+
+const TABS: VerificationStatus[] = ['PENDING', 'APPROVED', 'REJECTED'];
+
+const STATUS_TAG_VARIANT: Record<VerificationStatus, TagVariant> = {
+  PENDING: 'solid',
+  APPROVED: 'accent',
+  REJECTED: 'neutral',
+};
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
@@ -19,22 +28,24 @@ function formatDate(iso: string): string {
 export default function AdminVerificationScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
-  const queryClient = useQueryClient();
+  const [tab, setTab] = useState<VerificationStatus>('PENDING');
 
-  const { data, isPending } = useQuery({ queryKey: ['admin', 'providers', 'pending'], queryFn: listPendingProviders });
-
-  const verifyMutation = useMutation({
-    mutationFn: verifyProvider,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'providers', 'pending'] });
-      queryClient.invalidateQueries({ queryKey: ['admin', 'overview'] });
-    },
+  const { data, isPending } = useQuery({
+    queryKey: ['admin', 'providers', tab],
+    queryFn: () => listProvidersByStatus(tab),
   });
+
+  function openDetail(provider: AdminProvider) {
+    router.push({ pathname: '/(app)/admin/verification/[providerId]', params: { providerId: provider.id } });
+  }
 
   function renderProvider({ item }: { item: AdminProvider }) {
     return (
-      <View style={[styles.row, { borderColor: theme.divider }]}>
-        <ThemedText style={styles.businessName}>{item.businessName}</ThemedText>
+      <Pressable style={[styles.row, { borderColor: theme.divider }]} onPress={() => openDetail(item)}>
+        <View style={styles.rowTop}>
+          <ThemedText style={styles.businessName}>{item.businessName}</ThemedText>
+          <ChevronRight size={16} color={theme.neutral500} />
+        </View>
         <ThemedText type="small" themeColor="textSecondary">
           {item.ownerEmail}
         </ThemedText>
@@ -44,23 +55,13 @@ export default function AdminVerificationScreen() {
             {item.yearsExperience != null ? ` · ${item.yearsExperience} yr experience` : ''}
           </ThemedText>
         )}
-        {item.bio && (
-          <ThemedText type="small" themeColor="textSecondary" style={styles.bio}>
-            {item.bio}
-          </ThemedText>
-        )}
         <View style={styles.rowBottom}>
           <ThemedText type="small" themeColor="textSecondary">
             Applied {formatDate(item.createdAt)}
           </ThemedText>
-          <Button
-            label="Verify"
-            icon={<Check size={15} color={theme.bg} />}
-            loading={verifyMutation.isPending && verifyMutation.variables === item.id}
-            onPress={() => verifyMutation.mutate(item.id)}
-          />
+          <Tag label={`${item.checkedDocumentCount}/${item.documentCount} docs checked`} variant={STATUS_TAG_VARIANT[item.verificationStatus]} />
         </View>
-      </View>
+      </Pressable>
     );
   }
 
@@ -76,6 +77,14 @@ export default function AdminVerificationScreen() {
       </View>
       <Divider style={styles.headerDivider} />
 
+      <View style={styles.tabRow}>
+        {TABS.map((t) => (
+          <Pressable key={t} onPress={() => setTab(t)}>
+            <Tag label={t} variant={tab === t ? 'solid' : 'outline'} />
+          </Pressable>
+        ))}
+      </View>
+
       {isPending ? (
         <ActivityIndicator style={styles.loading} />
       ) : (
@@ -85,7 +94,7 @@ export default function AdminVerificationScreen() {
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
             <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
-              No providers waiting on verification.
+              No providers in this list.
             </ThemedText>
           }
           renderItem={renderProvider}
@@ -112,6 +121,12 @@ const styles = StyleSheet.create({
   headerDivider: {
     marginTop: 16,
   },
+  tabRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+  },
   loading: {
     marginTop: 32,
   },
@@ -129,13 +144,14 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 4,
   },
+  rowTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   businessName: {
     fontFamily: 'Archivo_800ExtraBold',
     fontSize: 15,
-  },
-  bio: {
-    marginTop: 4,
-    lineHeight: 18,
   },
   rowBottom: {
     flexDirection: 'row',

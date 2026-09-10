@@ -1,13 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MessageSquare } from 'lucide-react-native';
+import { ArrowLeft, MessageSquare, Phone } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { acceptBooking, completeBooking, declineBooking, listProviderBookings, startJobBooking, startTravelBooking } from '@/api/bookings';
 import { extractErrorMessage } from '@/api/errors';
-import type { Booking } from '@/api/types';
+import type { Booking, BookingStatus } from '@/api/types';
 import { Button } from '@/components/ds/button';
 import { Dialog } from '@/components/ds/dialog';
 import { Divider } from '@/components/ds/divider';
@@ -17,6 +17,29 @@ import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
 import { formatDateTime, minutesLeft, referenceCode, STATUS_LABEL, STATUS_TAG_VARIANT } from '@/utils/booking';
 import { formatCurrency } from '@/utils/currency';
+
+// Who performs each transition - not tracked as a real field anywhere, just derivable from the
+// lifecycle's own rules (see BookingController): a customer requests and can cancel, everything
+// else from ACCEPTED onward is a provider action, and auto-expiry (system) reads the same as a
+// decline to the provider.
+const STATUS_HISTORY: { status: BookingStatus; label: string; actor: string; at: (b: Booking) => string | null }[] = [
+  { status: 'REQUESTED', label: 'Requested', actor: 'customer', at: (b) => b.createdAt },
+  { status: 'ACCEPTED', label: 'Accepted', actor: 'you', at: (b) => b.acceptedAt },
+  { status: 'EN_ROUTE', label: 'En route', actor: 'you', at: (b) => b.enRouteAt },
+  { status: 'IN_PROGRESS', label: 'Started', actor: 'you', at: (b) => b.inProgressAt },
+  { status: 'COMPLETED', label: 'Completed', actor: 'you', at: (b) => b.completedAt },
+  { status: 'DECLINED', label: 'Declined', actor: 'you', at: (b) => b.declinedAt },
+  { status: 'CANCELLED', label: 'Cancelled', actor: 'customer', at: (b) => b.cancelledAt },
+];
+
+// What "Start travel" / "Start job" / "Mark complete" actually leads to, for the "Next allowed
+// transition" caption - not shown for a status with no further transition.
+const NEXT_TRANSITION: Partial<Record<BookingStatus, BookingStatus>> = {
+  REQUESTED: 'ACCEPTED',
+  ACCEPTED: 'EN_ROUTE',
+  EN_ROUTE: 'IN_PROGRESS',
+  IN_PROGRESS: 'COMPLETED',
+};
 
 export default function ProviderBookingDetailScreen() {
   const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
@@ -156,15 +179,44 @@ export default function ProviderBookingDetailScreen() {
             </ThemedText>
           </>
         )}
+
+        <ThemedText type="smallBold" style={styles.sectionLabel}>
+          Status history
+        </ThemedText>
+        <View style={styles.historyList}>
+          {STATUS_HISTORY.filter((step) => step.at(booking)).map((step) => (
+            <View key={step.status} style={styles.historyRow}>
+              <ThemedText type="small" style={styles.historyLabel}>
+                {step.label.toUpperCase()}
+              </ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                {formatDateTime(step.at(booking)!)} · {step.actor}
+              </ThemedText>
+            </View>
+          ))}
+        </View>
       </ScrollView>
 
       <View style={[styles.footer, { borderTopColor: theme.divider, paddingBottom: insets.bottom + 16 }]}>
-        <Pressable style={[styles.chatButton, { borderColor: theme.divider }]} onPress={openChat}>
-          <MessageSquare size={17} color={theme.text} />
-          <ThemedText type="smallBold">Message</ThemedText>
-        </Pressable>
+        {NEXT_TRANSITION[booking.status] && (
+          <ThemedText type="small" themeColor="textSecondary" style={styles.nextTransition}>
+            Next allowed transition: {STATUS_LABEL[booking.status]} &rarr; {STATUS_LABEL[NEXT_TRANSITION[booking.status]!]}
+          </ThemedText>
+        )}
+        <View style={styles.footerRow}>
+          {booking.customerPhone && ['ACCEPTED', 'EN_ROUTE', 'IN_PROGRESS'].includes(booking.status) && (
+            <Pressable
+              style={[styles.callButton, { borderColor: theme.divider }]}
+              onPress={() => Linking.openURL(`tel:${booking!.customerPhone}`)}>
+              <Phone size={17} color={theme.text} />
+            </Pressable>
+          )}
+          <Pressable style={[styles.chatButton, { borderColor: theme.divider }]} onPress={openChat}>
+            <MessageSquare size={17} color={theme.text} />
+            <ThemedText type="smallBold">Message</ThemedText>
+          </Pressable>
 
-        {booking.status === 'REQUESTED' && (
+          {booking.status === 'REQUESTED' && (
           <>
             <Pressable style={styles.declineLink} onPress={() => setDeclineTarget(booking)}>
               <ThemedText type="smallBold" style={{ color: theme.accent }}>
@@ -206,6 +258,7 @@ export default function ProviderBookingDetailScreen() {
             onPress={() => completeMutation.mutate(booking.id)}
           />
         )}
+        </View>
       </View>
 
       <Dialog
@@ -292,10 +345,28 @@ const styles = StyleSheet.create({
   notes: {
     lineHeight: 19,
   },
+  historyList: {
+    gap: 4,
+  },
+  historyRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  historyLabel: {
+    fontFamily: 'Archivo_800ExtraBold',
+    fontSize: 12,
+  },
   footer: {
     borderTopWidth: 2,
     paddingHorizontal: 20,
     paddingTop: 14,
+  },
+  nextTransition: {
+    marginBottom: 10,
+  },
+  footerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
@@ -308,6 +379,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     paddingVertical: 13,
     paddingHorizontal: 16,
+  },
+  callButton: {
+    width: 46,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 13,
   },
   declineLink: {
     paddingVertical: 13,
