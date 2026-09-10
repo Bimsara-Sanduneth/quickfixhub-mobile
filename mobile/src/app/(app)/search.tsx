@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { router, Stack } from 'expo-router';
-import { ArrowLeft, Check, Search, SlidersHorizontal, X } from 'lucide-react-native';
+import { ArrowLeft, Check, Map, Search, SlidersHorizontal, X } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,9 +15,13 @@ import { Divider } from '@/components/ds/divider';
 import { Tag } from '@/components/ds/tag';
 import { TextField } from '@/components/ds/text-field';
 import { ProviderListItem } from '@/components/provider-list-item';
+import { ProviderMap } from '@/components/provider-map';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
+import { useCurrentLocation } from '@/hooks/use-current-location';
 import { useTheme } from '@/hooks/use-theme';
+
+const RADIUS_OPTIONS_KM = [5, 10, 25, 50];
 
 export default function SearchScreen() {
   const insets = useSafeAreaInsets();
@@ -29,6 +33,12 @@ export default function SearchScreen() {
   const [categoryId, setCategoryId] = useState<string | undefined>();
   const [city, setCity] = useState('');
   const [verifiedOnly, setVerifiedOnly] = useState(false);
+  const [mapMode, setMapMode] = useState(false);
+  const [radiusKm, setRadiusKm] = useState(10);
+
+  // Only requests the location permission once the user actually opens map mode (2g).
+  const location = useCurrentLocation(mapMode);
+  const geoReady = mapMode && location.status === 'ready';
 
   // Small debounce so a fast typist doesn't fire a request per keystroke - fine at this
   // dataset's size, but still the right habit for a field wired straight to a network query.
@@ -40,21 +50,39 @@ export default function SearchScreen() {
   const categories = useQuery({ queryKey: ['categories'], queryFn: listCategories });
   const selectedCategory = categories.data?.find((c) => c.id === categoryId);
 
+  const geoParams = geoReady && location.status === 'ready' ? { lat: location.lat, lng: location.lng, radiusKm } : undefined;
+
   const providers = useQuery({
-    queryKey: ['providers', 'search', { q: debouncedText, categoryId, city, verifiedOnly }],
+    queryKey: ['providers', 'search', { q: debouncedText, categoryId, city, verifiedOnly, geoParams }],
     queryFn: () =>
       searchProviders({
         q: debouncedText || undefined,
         categoryId,
         city: city.trim() || undefined,
         verified: verifiedOnly || undefined,
+        ...geoParams,
       }),
   });
 
   const activeFilterCount = (categoryId ? 1 : 0) + (city.trim() ? 1 : 0) + (verifiedOnly ? 1 : 0);
 
+  const geocodedProviders = (providers.data?.content ?? []).filter(
+    (p): p is ProviderSummary & { latitude: number; longitude: number } => p.latitude != null && p.longitude != null,
+  );
+  const mapCenter =
+    geoReady && location.status === 'ready'
+      ? { lat: location.lat, lng: location.lng }
+      : geocodedProviders[0]
+        ? { lat: geocodedProviders[0].latitude, lng: geocodedProviders[0].longitude }
+        : { lat: 6.9271, lng: 79.8612 }; // Colombo - a reasonable default when nothing else is known.
+
   function openProvider(provider: ProviderSummary) {
     router.push({ pathname: '/(app)/providers/[providerId]', params: { providerId: provider.id } });
+  }
+
+  function openProviderById(id: string) {
+    const provider = providers.data?.content.find((p) => p.id === id);
+    if (provider) openProvider(provider);
   }
 
   function resetFilters() {
@@ -83,6 +111,12 @@ export default function SearchScreen() {
           />
         </View>
         <Pressable
+          style={[styles.filterButton, { borderColor: theme.divider, backgroundColor: mapMode ? theme.accent : 'transparent' }]}
+          onPress={() => setMapMode((v) => !v)}
+          hitSlop={4}>
+          <Map size={18} color={mapMode ? theme.bg : theme.text} />
+        </Pressable>
+        <Pressable
           style={[
             styles.filterButton,
             { borderColor: theme.divider, backgroundColor: activeFilterCount > 0 ? theme.accent : 'transparent' },
@@ -93,6 +127,25 @@ export default function SearchScreen() {
         </Pressable>
       </View>
       <Divider style={styles.headerDivider} />
+
+      {mapMode && (
+        <View style={styles.radiusRow}>
+          <ThemedText type="small" themeColor="textSecondary">
+            Within
+          </ThemedText>
+          {RADIUS_OPTIONS_KM.map((km) => (
+            <Pressable key={km} onPress={() => setRadiusKm(km)}>
+              <Tag label={`${km} km`} variant={radiusKm === km ? 'solid' : 'outline'} />
+            </Pressable>
+          ))}
+        </View>
+      )}
+
+      {mapMode && location.status === 'denied' && (
+        <ThemedText type="small" themeColor="textSecondary" style={styles.locationNotice}>
+          Location permission denied - showing all providers with a known location instead of sorting by distance.
+        </ThemedText>
+      )}
 
       {activeFilterCount > 0 && (
         <View style={styles.activeFilters}>
@@ -116,6 +169,22 @@ export default function SearchScreen() {
       )}
       {providers.isPending ? (
         <ActivityIndicator style={styles.loading} />
+      ) : mapMode ? (
+        geocodedProviders.length === 0 ? (
+          <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
+            No providers with a known location match your search.
+          </ThemedText>
+        ) : (
+          <ProviderMap
+            style={styles.map}
+            center={mapCenter}
+            zoom={geoReady ? 12 : 11}
+            userLocation={geoReady && location.status === 'ready' ? { lat: location.lat, lng: location.lng } : undefined}
+            radiusKm={geoReady ? radiusKm : undefined}
+            markers={geocodedProviders.map((p) => ({ id: p.id, lat: p.latitude, lng: p.longitude, label: p.businessName }))}
+            onMarkerPress={openProviderById}
+          />
+        )
       ) : (
         <FlatList
           data={providers.data?.content ?? []}
@@ -219,6 +288,21 @@ const styles = StyleSheet.create({
   },
   headerDivider: {
     marginBottom: 4,
+  },
+  radiusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 20,
+    paddingTop: 12,
+  },
+  locationNotice: {
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    lineHeight: 17,
+  },
+  map: {
+    flex: 1,
   },
   activeFilters: {
     flexDirection: 'row',

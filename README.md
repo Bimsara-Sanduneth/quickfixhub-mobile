@@ -32,10 +32,15 @@ _Diagram to be added in `docs/architecture.png` — see Milestone 1._
 ```bash
 cd backend
 cp .env.example .env   # fill in local values
-docker compose up -d   # Postgres + Redis
+docker compose up -d   # Postgres + Redis + Mailpit
 ./gradlew bootRun
 ```
 API docs available at `http://localhost:8080/swagger-ui.html` once running.
+
+Outgoing email (welcome, password-reset code, security alerts) goes to the local **Mailpit**
+container by default — view every message at `http://localhost:8025`, nothing leaves your machine.
+To send real email instead, swap the `SMTP_*` block in `.env` (a ready-to-fill **Gmail** block —
+App Password, port 587, STARTTLS — is in [`backend/.env.example`](backend/.env.example)) and restart.
 
 ### Mobile
 ```bash

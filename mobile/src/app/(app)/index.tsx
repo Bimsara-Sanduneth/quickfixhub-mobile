@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Redirect, router, Stack } from 'expo-router';
 import {
-  Bell,
   Calendar,
   House,
   Leaf,
@@ -24,6 +23,7 @@ import { getCurrentUser } from '@/api/me';
 import { searchProviders } from '@/api/providers';
 import type { ProviderSummary, ServiceCategory } from '@/api/types';
 import { useAuth } from '@/auth/AuthContext';
+import { NotificationBell } from '@/components/notification-bell';
 import { ProviderListItem } from '@/components/provider-list-item';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -52,7 +52,7 @@ function getGreeting(): string {
 export default function CategoryBrowseScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
-  const { logout, justRegistered, justRegisteredRole } = useAuth();
+  const { justRegistered, justRegisteredRole } = useAuth();
 
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: getCurrentUser, enabled: !justRegistered });
   const categories = useQuery({ queryKey: ['categories'], queryFn: listCategories, enabled: !justRegistered });
@@ -69,6 +69,13 @@ export default function CategoryBrowseScreen() {
   // provider signup with no provider_profile row is invisible to every customer-facing endpoint.
   if (justRegistered) {
     return <Redirect href={justRegisteredRole === 'PROVIDER' ? '/(app)/provider-onboarding' : '/(app)/profile-completion'} />;
+  }
+
+  // An admin has no use for the customer discovery Home screen (categories, "recommended for
+  // you", etc.) - self-registration as ADMIN is rejected by the backend, so this only ever
+  // matches the one seeded demo admin account.
+  if (me?.role === 'ADMIN') {
+    return <Redirect href="/(app)/admin" />;
   }
 
   function openCategory(category: ServiceCategory) {
@@ -95,8 +102,10 @@ export default function CategoryBrowseScreen() {
             <View style={[styles.hero, { backgroundColor: theme.accent, paddingTop: insets.top + 20 }]}>
               <View style={styles.heroTopRow}>
                 <ThemedText style={[styles.wordmark, { color: theme.bg }]}>QUICKFIXHUB</ThemedText>
-                {/* No notifications system yet - purely decorative for now. */}
-                <Bell size={20} color={theme.bg} />
+                {/* Default badge colors (accent fill, bg ring) would be accent-on-accent here and
+                    disappear against this hero - invert to a bg-colored badge with an accent ring
+                    and accent-colored digits instead. */}
+                <NotificationBell iconColor={theme.bg} badgeColor={theme.bg} badgeTextColor={theme.accent} ringColor={theme.accent} />
               </View>
               <ThemedText style={[styles.heroTitle, { color: theme.bg }]}>Fixed{'\n'}today.</ThemedText>
               <ThemedText style={[styles.heroSubtitle, { color: theme.bg }]}>
@@ -174,14 +183,11 @@ export default function CategoryBrowseScreen() {
           <Calendar size={20} color={theme.neutral500} />
           <ThemedText style={[styles.tabLabel, { color: theme.neutral500 }]}>BOOKINGS</ThemedText>
         </Pressable>
-        {/* Chat has no screen yet - placeholder until that milestone lands. */}
-        <View style={styles.tabItem}>
+        <Pressable style={styles.tabItem} onPress={() => router.push('/(app)/chat')}>
           <MessageSquare size={20} color={theme.neutral500} />
           <ThemedText style={[styles.tabLabel, { color: theme.neutral500 }]}>CHAT</ThemedText>
-        </View>
-        {/* Stands in for the real profile/settings screen (design 2q, not built yet) - logout
-            needs to be reachable from somewhere for now. */}
-        <Pressable style={styles.tabItem} onPress={logout}>
+        </Pressable>
+        <Pressable style={styles.tabItem} onPress={() => router.push('/(app)/profile')}>
           <User size={20} color={theme.neutral500} />
           <ThemedText style={[styles.tabLabel, { color: theme.neutral500 }]}>YOU</ThemedText>
         </Pressable>

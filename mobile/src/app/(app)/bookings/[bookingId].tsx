@@ -1,39 +1,23 @@
 import { useQuery } from '@tanstack/react-query';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Check, MessageSquare } from 'lucide-react-native';
+import { ArrowLeft, Check, MessageSquare, Phone } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { listMyBookings } from '@/api/bookings';
+import { getBookingPayment } from '@/api/payments';
+import { getProvider } from '@/api/providers';
 import type { Booking, BookingStatus } from '@/api/types';
 import { CancelBookingDialog } from '@/components/cancel-booking-dialog';
 import { Divider } from '@/components/ds/divider';
-import { Tag, type TagVariant } from '@/components/ds/tag';
+import { Tag } from '@/components/ds/tag';
+import { ProviderMap } from '@/components/provider-map';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
+import { formatDateTime, minutesLeft, referenceCode, STATUS_LABEL, STATUS_TAG_VARIANT } from '@/utils/booking';
 import { formatCurrency } from '@/utils/currency';
-
-const STATUS_TAG_VARIANT: Record<BookingStatus, TagVariant> = {
-  REQUESTED: 'outline',
-  ACCEPTED: 'accent',
-  EN_ROUTE: 'accent',
-  IN_PROGRESS: 'accent',
-  COMPLETED: 'solid',
-  CANCELLED: 'neutral',
-  DECLINED: 'neutral',
-};
-
-const STATUS_LABEL: Record<BookingStatus, string> = {
-  REQUESTED: 'REQUESTED',
-  ACCEPTED: 'ACCEPTED',
-  EN_ROUTE: 'EN ROUTE',
-  IN_PROGRESS: 'IN PROGRESS',
-  COMPLETED: 'COMPLETED',
-  CANCELLED: 'CANCELLED',
-  DECLINED: 'DECLINED',
-};
 
 const TIMELINE_STEPS: { status: BookingStatus; label: string; at: (b: Booking) => string | null }[] = [
   { status: 'REQUESTED', label: 'Requested', at: (b) => b.createdAt },
@@ -42,19 +26,6 @@ const TIMELINE_STEPS: { status: BookingStatus; label: string; at: (b: Booking) =
   { status: 'IN_PROGRESS', label: 'In progress', at: (b) => b.inProgressAt },
   { status: 'COMPLETED', label: 'Completed', at: (b) => b.completedAt },
 ];
-
-function referenceCode(bookingId: string): string {
-  return `#QFH-${bookingId.slice(0, 8).toUpperCase()}`;
-}
-
-function formatDateTime(iso: string): string {
-  const date = new Date(iso);
-  return `${date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} · ${date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
-}
-
-function minutesLeft(expiresAt: string): number {
-  return Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 60000));
-}
 
 export default function BookingDetailScreen() {
   const { bookingId } = useLocalSearchParams<{ bookingId: string }>();
@@ -65,6 +36,22 @@ export default function BookingDetailScreen() {
 
   const { data: bookings, isPending } = useQuery({ queryKey: ['bookings'], queryFn: listMyBookings });
   const booking = bookings?.find((b) => b.id === bookingId);
+  const showMap = !!booking && (booking.status === 'ACCEPTED' || booking.status === 'EN_ROUTE' || booking.status === 'IN_PROGRESS');
+
+  // Only fetched once tracking actually starts - the provider's geocoded location isn't needed
+  // before then. Shares the cache with the provider-detail screen's own query.
+  const provider = useQuery({
+    queryKey: ['providers', booking?.providerProfileId],
+    queryFn: () => getProvider(booking!.providerProfileId),
+    enabled: showMap,
+  });
+
+  // A Payment row only exists once a booking is COMPLETED (see the backend's PaymentService).
+  const payment = useQuery({
+    queryKey: ['bookings', bookingId, 'payment'],
+    queryFn: () => getBookingPayment(bookingId),
+    enabled: booking?.status === 'COMPLETED',
+  });
 
   // Only REQUESTED bookings show a countdown, but the interval is harmless (and cheap) to leave
   // running regardless - it just re-renders a screen the user is already looking at.
@@ -141,13 +128,29 @@ export default function BookingDetailScreen() {
       <Divider style={booking.status === 'REQUESTED' ? undefined : styles.headerDivider} />
 
       <ScrollView contentContainerStyle={styles.body}>
-        {(booking.status === 'ACCEPTED' || booking.status === 'EN_ROUTE' || booking.status === 'IN_PROGRESS') && (
+        {showMap && (
           <>
-            <View style={[styles.mapPlaceholder, { backgroundColor: theme.surface, borderColor: theme.divider }]}>
-              <ThemedText type="small" themeColor="textSecondary">
-                Live map — not built yet
-              </ThemedText>
-            </View>
+            {provider.data?.latitude != null && provider.data.longitude != null ? (
+              <>
+                <ProviderMap
+                  style={styles.map}
+                  center={{ lat: provider.data.latitude, lng: provider.data.longitude }}
+                  zoom={13}
+                  markers={[
+                    { id: provider.data.id, lat: provider.data.latitude, lng: provider.data.longitude, label: booking.providerBusinessName },
+                  ]}
+                />
+                <ThemedText type="small" themeColor="textSecondary" style={styles.mapCaption}>
+                  Provider&rsquo;s service area - live position tracking isn&rsquo;t available yet.
+                </ThemedText>
+              </>
+            ) : (
+              <View style={[styles.mapPlaceholder, { backgroundColor: theme.surface, borderColor: theme.divider }]}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  {provider.isPending ? 'Loading map…' : "Provider's location isn't available."}
+                </ThemedText>
+              </View>
+            )}
 
             <ThemedText type="smallBold" style={styles.sectionLabel}>
               Progress
@@ -214,6 +217,37 @@ export default function BookingDetailScreen() {
           <ThemedText type="smallBold">{formatCurrency(booking.price)}</ThemedText>
         </View>
 
+        {payment.data && (
+          <>
+            <ThemedText type="smallBold" style={styles.sectionLabel}>
+              Receipt
+            </ThemedText>
+            <View style={[styles.summaryRow, { borderBottomColor: theme.divider }]}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Paid
+              </ThemedText>
+              <ThemedText type="smallBold">{formatDateTime(payment.data.paidAt)}</ThemedText>
+            </View>
+            <View style={[styles.summaryRow, { borderBottomColor: theme.divider, borderBottomWidth: payment.data.refundAmount != null ? 1 : 0 }]}>
+              <ThemedText type="small" themeColor="textSecondary">
+                Status
+              </ThemedText>
+              <Tag
+                label={payment.data.status.replace('_', ' ')}
+                variant={payment.data.status === 'PAID' ? 'accent' : 'neutral'}
+              />
+            </View>
+            {payment.data.refundAmount != null && (
+              <View style={[styles.summaryRow, { borderBottomColor: theme.divider, borderBottomWidth: 0 }]}>
+                <ThemedText type="small" themeColor="textSecondary">
+                  Refunded
+                </ThemedText>
+                <ThemedText type="smallBold">{formatCurrency(payment.data.refundAmount)}</ThemedText>
+              </View>
+            )}
+          </>
+        )}
+
         {booking.notes && (
           <>
             <ThemedText type="smallBold" style={styles.sectionLabel}>
@@ -227,6 +261,13 @@ export default function BookingDetailScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { borderTopColor: theme.divider, paddingBottom: insets.bottom + 16 }]}>
+        {booking.providerPhone && (
+          <Pressable
+            style={[styles.callButton, { borderColor: theme.divider }]}
+            onPress={() => Linking.openURL(`tel:${booking!.providerPhone}`)}>
+            <Phone size={17} color={theme.text} />
+          </Pressable>
+        )}
         <Pressable style={[styles.chatButton, { borderColor: theme.divider }]} onPress={openChat}>
           <MessageSquare size={17} color={theme.text} />
           <ThemedText type="smallBold">Message</ThemedText>
@@ -318,6 +359,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 20,
   },
+  map: {
+    height: 180,
+    marginBottom: 8,
+  },
+  mapCaption: {
+    marginBottom: 20,
+    lineHeight: 16,
+  },
   sectionLabel: {
     marginBottom: 12,
   },
@@ -366,6 +415,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     borderWidth: 1,
+    paddingVertical: 13,
+  },
+  callButton: {
+    width: 48,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 13,
   },
   cancelLink: {

@@ -4,6 +4,8 @@ import com.quickfixhub.backend.booking.Booking;
 import com.quickfixhub.backend.booking.BookingRepository;
 import com.quickfixhub.backend.messaging.dto.CreateMessageRequest;
 import com.quickfixhub.backend.messaging.dto.MessageResponse;
+import com.quickfixhub.backend.notification.NotificationService;
+import com.quickfixhub.backend.notification.NotificationType;
 import com.quickfixhub.backend.user.User;
 import com.quickfixhub.backend.user.UserRepository;
 import jakarta.validation.Valid;
@@ -29,15 +31,21 @@ import java.util.UUID;
 @RequestMapping("/bookings/{bookingId}/messages")
 public class MessageController {
 
+	// A message body over this length is truncated for the notification preview - the message
+	// itself is stored/shown in full, this only trims what lands in the notification list.
+	private static final int PREVIEW_LENGTH = 120;
+
 	private final MessageRepository messageRepository;
 	private final BookingRepository bookingRepository;
 	private final UserRepository userRepository;
+	private final NotificationService notificationService;
 
 	public MessageController(MessageRepository messageRepository, BookingRepository bookingRepository,
-			UserRepository userRepository) {
+			UserRepository userRepository, NotificationService notificationService) {
 		this.messageRepository = messageRepository;
 		this.bookingRepository = bookingRepository;
 		this.userRepository = userRepository;
+		this.notificationService = notificationService;
 	}
 
 	@GetMapping
@@ -61,7 +69,15 @@ public class MessageController {
 				.orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found"));
 
 		Message message = new Message(booking, sender, request.body());
-		return MessageResponse.from(messageRepository.save(message));
+		message = messageRepository.save(message);
+
+		boolean senderIsCustomer = booking.getCustomer().getId().equals(userId);
+		User recipient = senderIsCustomer ? booking.getProviderProfile().getUser() : booking.getCustomer();
+		String preview = request.body().length() > PREVIEW_LENGTH ? request.body().substring(0, PREVIEW_LENGTH) + "…" : request.body();
+		notificationService.notify(recipient, NotificationType.NEW_MESSAGE, "New message from " + sender.getFullName(), preview,
+				booking.getId());
+
+		return MessageResponse.from(message);
 	}
 
 	// 404 (not 403) for a booking that exists but isn't either side's - same "don't confirm the id

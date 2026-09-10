@@ -1,14 +1,15 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, MessageSquare, Phone } from 'lucide-react-native';
+import { ArrowLeft, Bookmark, BookmarkCheck, MessageSquare, Phone } from 'lucide-react-native';
 import { useMemo } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Image, Linking, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { listMyBookings } from '@/api/bookings';
 import { extractErrorMessage } from '@/api/errors';
-import { getProvider } from '@/api/providers';
+import { getProvider, listSavedProviders, saveProvider, unsaveProvider } from '@/api/providers';
 import { listProviderReviews } from '@/api/reviews';
-import type { ProviderServiceItem } from '@/api/types';
+import { REVIEW_TAG_LABEL, type Booking, type ProviderServiceItem, type ReviewTag } from '@/api/types';
 import { Button } from '@/components/ds/button';
 import { Tag } from '@/components/ds/tag';
 import { StarRating } from '@/components/star-rating';
@@ -23,6 +24,7 @@ export default function ProviderDetailScreen() {
   const { providerId } = useLocalSearchParams<{ providerId: string }>();
   const insets = useSafeAreaInsets();
   const theme = useTheme();
+  const queryClient = useQueryClient();
 
   const { data, isPending, isError, error, refetch } = useQuery({
     queryKey: ['providers', providerId],
@@ -34,6 +36,25 @@ export default function ProviderDetailScreen() {
     queryFn: () => listProviderReviews(providerId),
     enabled: !!providerId,
   });
+  const saved = useQuery({ queryKey: ['savedProviders'], queryFn: listSavedProviders });
+  const isSaved = saved.data?.some((p) => p.id === providerId) ?? false;
+  // Chat and phone are unlocked by a booking - there's no booking-less messaging in this app,
+  // and a provider's number isn't public. Prefer a still-active booking, else the latest one.
+  const myBookings = useQuery({ queryKey: ['bookings'], queryFn: listMyBookings });
+  const contactBooking = useMemo(() => {
+    const withThisProvider = (myBookings.data ?? [])
+      .filter((b) => b.providerProfileId === providerId)
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    const activeStatuses: Booking['status'][] = ['REQUESTED', 'ACCEPTED', 'EN_ROUTE', 'IN_PROGRESS'];
+    return withThisProvider.find((b) => activeStatuses.includes(b.status)) ?? withThisProvider[0] ?? null;
+  }, [myBookings.data, providerId]);
+
+  function invalidateSaved() {
+    queryClient.invalidateQueries({ queryKey: ['savedProviders'] });
+  }
+  const saveMutation = useMutation({ mutationFn: () => saveProvider(providerId), onSuccess: invalidateSaved });
+  const unsaveMutation = useMutation({ mutationFn: () => unsaveProvider(providerId), onSuccess: invalidateSaved });
+  const savePending = saveMutation.isPending || unsaveMutation.isPending;
 
   const fromPrice = useMemo(() => {
     if (!data || data.services.length === 0) return null;
@@ -74,6 +95,31 @@ export default function ProviderDetailScreen() {
     );
   }
 
+  const providerName = data.businessName;
+
+  const onMessagePress = () => {
+    if (!contactBooking) {
+      Alert.alert(`Message ${providerName}`, "You can message a provider once you've requested a booking with them.");
+      return;
+    }
+    router.push({
+      pathname: '/(app)/chat/[bookingId]',
+      params: { bookingId: contactBooking.id, otherPartyName: providerName },
+    });
+  };
+
+  const onCallPress = () => {
+    if (!contactBooking) {
+      Alert.alert(`Call ${providerName}`, "Contact details are shared once you've requested a booking with them.");
+      return;
+    }
+    if (!contactBooking.providerPhone) {
+      Alert.alert(`Call ${providerName}`, "This provider hasn't added a phone number yet.");
+      return;
+    }
+    Linking.openURL(`tel:${contactBooking.providerPhone}`);
+  };
+
   function renderService({ item }: { item: ProviderServiceItem }) {
     return (
       <View style={[styles.serviceRow, { borderColor: theme.divider }]}>
@@ -113,6 +159,13 @@ export default function ProviderDetailScreen() {
                 {review.comment}
               </ThemedText>
             )}
+            {review.tags.length > 0 && (
+              <View style={styles.reviewTagRow}>
+                {review.tags.map((tag) => (
+                  <Tag key={tag} label={REVIEW_TAG_LABEL[tag as ReviewTag] ?? tag} variant="neutral" />
+                ))}
+              </View>
+            )}
           </View>
         ))
       )}
@@ -129,20 +182,40 @@ export default function ProviderDetailScreen() {
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
           <>
-            <View style={[styles.coverPhoto, { backgroundColor: theme.neutral300 }]} />
+            <View style={[styles.coverPhoto, { backgroundColor: theme.neutral300 }]}>
+              {data.coverPhotoDataUri && <Image source={{ uri: data.coverPhotoDataUri }} style={styles.coverPhotoImage} />}
+            </View>
             {backButton}
 
             <View style={styles.profileRow}>
               <View style={styles.avatarRow}>
-                <View style={[styles.avatar, { backgroundColor: theme.neutral200, borderColor: theme.bg }]} />
+                <View style={[styles.avatar, { backgroundColor: theme.neutral200, borderColor: theme.bg }]}>
+                  {data.photoDataUri && <Image source={{ uri: data.photoDataUri }} style={styles.avatarImage} />}
+                </View>
                 <View style={styles.actionIcons}>
-                  {/* No calling/chat system yet - decorative for now. */}
-                  <View style={[styles.actionIcon, { borderColor: theme.divider }]}>
+                  <Pressable
+                    style={[styles.actionIcon, { borderColor: theme.divider, backgroundColor: isSaved ? theme.accent : 'transparent' }]}
+                    disabled={savePending}
+                    onPress={() => (isSaved ? unsaveMutation.mutate() : saveMutation.mutate())}
+                    hitSlop={4}>
+                    {isSaved ? (
+                      <BookmarkCheck size={17} color={theme.bg} />
+                    ) : (
+                      <Bookmark size={17} color={theme.text} />
+                    )}
+                  </Pressable>
+                  <Pressable
+                    style={[styles.actionIcon, { borderColor: theme.divider }, !contactBooking && styles.actionIconMuted]}
+                    onPress={onCallPress}
+                    hitSlop={4}>
                     <Phone size={17} color={theme.text} />
-                  </View>
-                  <View style={[styles.actionIcon, { borderColor: theme.divider }]}>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.actionIcon, { borderColor: theme.divider }, !contactBooking && styles.actionIconMuted]}
+                    onPress={onMessagePress}
+                    hitSlop={4}>
                     <MessageSquare size={17} color={theme.text} />
-                  </View>
+                  </Pressable>
                 </View>
               </View>
 
@@ -250,6 +323,11 @@ const styles = StyleSheet.create({
   },
   coverPhoto: {
     height: 196,
+    overflow: 'hidden',
+  },
+  coverPhotoImage: {
+    width: '100%',
+    height: '100%',
   },
   profileRow: {
     marginTop: -46,
@@ -264,6 +342,11 @@ const styles = StyleSheet.create({
     width: 92,
     height: 92,
     borderWidth: 3,
+    overflow: 'hidden',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
   },
   actionIcons: {
     flexDirection: 'row',
@@ -275,6 +358,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  // No booking with this provider yet - the button still responds (with an explainer) but reads
+  // as not-yet-available.
+  actionIconMuted: {
+    opacity: 0.4,
   },
   businessName: {
     fontFamily: 'Archivo_800ExtraBold',
@@ -368,6 +456,12 @@ const styles = StyleSheet.create({
   },
   reviewComment: {
     lineHeight: 18,
+  },
+  reviewTagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
   },
   footer: {
     borderTopWidth: 2,

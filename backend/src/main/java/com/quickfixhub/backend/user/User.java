@@ -34,6 +34,16 @@ public class User {
 	@Column
 	private String phone;
 
+	// A data: URI (e.g. "data:image/jpeg;base64,...") - stored directly in the row since no
+	// object storage exists in this project. Null until the user uploads one.
+	@Column(name = "photo_data_uri", columnDefinition = "TEXT")
+	private String photoDataUri;
+
+	// Same shape as photoDataUri - shown on a provider's public detail page, or just kept private
+	// in a customer's own profile section (nowhere else reads it for a customer today).
+	@Column(name = "cover_photo_data_uri", columnDefinition = "TEXT")
+	private String coverPhotoDataUri;
+
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
 	private Role role;
@@ -82,12 +92,33 @@ public class User {
 		return passwordHash;
 	}
 
+	// Only ever set to an already-encoded hash - see AuthService (registration, password reset).
+	public void setPasswordHash(String passwordHash) {
+		this.passwordHash = passwordHash;
+	}
+
 	public String getFullName() {
 		return fullName;
 	}
 
 	public String getPhone() {
 		return phone;
+	}
+
+	public String getPhotoDataUri() {
+		return photoDataUri;
+	}
+
+	public void setPhotoDataUri(String photoDataUri) {
+		this.photoDataUri = photoDataUri;
+	}
+
+	public String getCoverPhotoDataUri() {
+		return coverPhotoDataUri;
+	}
+
+	public void setCoverPhotoDataUri(String coverPhotoDataUri) {
+		this.coverPhotoDataUri = coverPhotoDataUri;
 	}
 
 	public Role getRole() {

@@ -8,38 +8,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { listMyBookings } from '@/api/bookings';
 import { extractErrorMessage } from '@/api/errors';
 import { createReview } from '@/api/reviews';
-import type { Booking, BookingStatus } from '@/api/types';
+import { REVIEW_TAG_LABEL, REVIEW_TAGS, type Booking } from '@/api/types';
 import { CancelBookingDialog } from '@/components/cancel-booking-dialog';
 import { Button } from '@/components/ds/button';
 import { Dialog } from '@/components/ds/dialog';
 import { Divider } from '@/components/ds/divider';
-import { Tag, type TagVariant } from '@/components/ds/tag';
+import { Tag } from '@/components/ds/tag';
 import { TextField } from '@/components/ds/text-field';
 import { StarRating } from '@/components/star-rating';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
+import { STATUS_LABEL, STATUS_TAG_VARIANT } from '@/utils/booking';
 import { formatCurrency } from '@/utils/currency';
-
-const STATUS_TAG_VARIANT: Record<BookingStatus, TagVariant> = {
-  REQUESTED: 'outline',
-  ACCEPTED: 'accent',
-  EN_ROUTE: 'accent',
-  IN_PROGRESS: 'accent',
-  COMPLETED: 'solid',
-  CANCELLED: 'neutral',
-  DECLINED: 'neutral',
-};
-
-const STATUS_LABEL: Record<BookingStatus, string> = {
-  REQUESTED: 'REQUESTED',
-  ACCEPTED: 'ACCEPTED',
-  EN_ROUTE: 'EN ROUTE',
-  IN_PROGRESS: 'IN PROGRESS',
-  COMPLETED: 'COMPLETED',
-  CANCELLED: 'CANCELLED',
-  DECLINED: 'DECLINED',
-};
 
 function formatSchedule(iso: string): string {
   const date = new Date(iso);
@@ -54,6 +35,7 @@ export default function MyBookingsScreen() {
   const [reviewTarget, setReviewTarget] = useState<Booking | null>(null);
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
+  const [reviewTags, setReviewTags] = useState<string[]>([]);
 
   const { data, isPending, isError, error, refetch, isRefetching } = useQuery({
     queryKey: ['bookings'],
@@ -62,7 +44,11 @@ export default function MyBookingsScreen() {
 
   const reviewMutation = useMutation({
     mutationFn: () =>
-      createReview(reviewTarget!.id, { rating: reviewRating, comment: reviewComment.trim() || undefined }),
+      createReview(reviewTarget!.id, {
+        rating: reviewRating,
+        comment: reviewComment.trim() || undefined,
+        tags: reviewTags.length > 0 ? reviewTags : undefined,
+      }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
       queryClient.invalidateQueries({ queryKey: ['providers', reviewTarget?.providerProfileId] });
@@ -74,12 +60,18 @@ export default function MyBookingsScreen() {
     setReviewTarget(booking);
     setReviewRating(0);
     setReviewComment('');
+    setReviewTags([]);
   }
 
   function closeReviewDialog() {
     setReviewTarget(null);
     setReviewRating(0);
     setReviewComment('');
+    setReviewTags([]);
+  }
+
+  function toggleReviewTag(tag: string) {
+    setReviewTags((prev) => (prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]));
   }
 
   function openChat(booking: Booking) {
@@ -191,6 +183,13 @@ export default function MyBookingsScreen() {
           </>
         }>
         <StarRating rating={reviewRating} onChange={setReviewRating} size={28} style={styles.reviewStars} />
+        <View style={styles.reviewTagWrap}>
+          {REVIEW_TAGS.map((tag) => (
+            <Pressable key={tag} onPress={() => toggleReviewTag(tag)}>
+              <Tag label={REVIEW_TAG_LABEL[tag]} variant={reviewTags.includes(tag) ? 'solid' : 'outline'} />
+            </Pressable>
+          ))}
+        </View>
         <TextField
           placeholder="How did it go? (optional)"
           value={reviewComment}
@@ -278,6 +277,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
   },
   reviewStars: {
+    marginBottom: 12,
+  },
+  reviewTagWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
     marginBottom: 12,
   },
   reviewCommentInput: {
