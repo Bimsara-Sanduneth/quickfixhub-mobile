@@ -14,5 +14,7 @@ public interface ProviderProfileRepository extends JpaRepository<ProviderProfile
 
 	long countByVerified(boolean verified);
 
-	List<ProviderProfile> findByVerifiedFalseOrderByCreatedAtAsc();
+	long countByVerificationStatus(VerificationStatus verificationStatus);
+
+	List<ProviderProfile> findByVerificationStatusOrderByCreatedAtAsc(VerificationStatus verificationStatus);
 }

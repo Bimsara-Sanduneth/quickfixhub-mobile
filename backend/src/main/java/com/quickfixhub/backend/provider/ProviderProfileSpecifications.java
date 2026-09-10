@@ -51,4 +51,12 @@ final class ProviderProfileSpecifications {
 				? null
 				: cb.isTrue(root.get("verified"));
 	}
+
+	// A logged-in provider searching (e.g. the Home screen's "Recommended for you", which is
+	// really just an unfiltered search) shouldn't see their own listing recommended to them.
+	static Specification<ProviderProfile> excludeUser(UUID userId) {
+		return (root, query, cb) -> userId == null
+				? null
+				: cb.notEqual(root.get("user").get("id"), userId);
+	}
 }

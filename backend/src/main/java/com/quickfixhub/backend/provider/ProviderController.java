@@ -11,6 +11,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -27,6 +28,7 @@ import java.util.stream.Collectors;
 
 import static com.quickfixhub.backend.provider.ProviderProfileSpecifications.businessNameContains;
 import static com.quickfixhub.backend.provider.ProviderProfileSpecifications.cityContains;
+import static com.quickfixhub.backend.provider.ProviderProfileSpecifications.excludeUser;
 import static com.quickfixhub.backend.provider.ProviderProfileSpecifications.offersCategory;
 import static com.quickfixhub.backend.provider.ProviderProfileSpecifications.offersService;
 import static com.quickfixhub.backend.provider.ProviderProfileSpecifications.verifiedOnly;
@@ -48,6 +50,11 @@ public class ProviderController {
 
 	@GetMapping
 	public Page<ProviderSummaryResponse> searchProviders(
+			// Public endpoint, but the JWT filter still authenticates a request that carries a
+			// valid token regardless of path - so this is non-null exactly when the caller is
+			// logged in, letting a provider's own listing be excluded from their own results
+			// below, and null for a genuinely anonymous request.
+			@AuthenticationPrincipal UUID callerId,
 			@RequestParam(required = false) UUID categoryId,
 			@RequestParam(required = false) UUID serviceId,
 			@RequestParam(required = false) String q,
@@ -66,7 +73,8 @@ public class ProviderController {
 				.and(offersService(serviceId))
 				.and(businessNameContains(q))
 				.and(cityContains(city))
-				.and(verifiedOnly(verified));
+				.and(verifiedOnly(verified))
+				.and(excludeUser(callerId));
 
 		Page<ProviderProfile> page = (lat != null && lng != null && radiusKm != null)
 				? searchWithinRadius(spec, lat, lng, radiusKm, pageable)

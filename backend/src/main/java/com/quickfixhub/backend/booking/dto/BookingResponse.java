@@ -14,6 +14,11 @@ public record BookingResponse(
 		// Not needed for a customer's own bookings (they know who they are) but this DTO is
 		// shared with the provider-side listing, which does need it.
 		String customerName,
+		// Contact numbers are exchanged once a booking exists - the two parties can call each
+		// other from the booking (and, for the customer, from the provider's profile). Either can
+		// be null (phone is optional at registration).
+		String providerPhone,
+		String customerPhone,
 		UUID serviceId,
 		String serviceName,
 		UUID addressId,
@@ -49,6 +54,8 @@ public record BookingResponse(
 				booking.getProviderProfile().getId(),
 				booking.getProviderProfile().getBusinessName(),
 				booking.getCustomer().getFullName(),
+				booking.getProviderProfile().getUser().getPhone(),
+				booking.getCustomer().getPhone(),
 				booking.getProviderService().getService().getId(),
 				booking.getProviderService().getService().getName(),
 				booking.getAddress().getId(),

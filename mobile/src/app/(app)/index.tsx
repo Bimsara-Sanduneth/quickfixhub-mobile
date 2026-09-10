@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Redirect, router, Stack } from 'expo-router';
 import {
-  Bell,
   Calendar,
   House,
   Leaf,
@@ -24,6 +23,7 @@ import { getCurrentUser } from '@/api/me';
 import { searchProviders } from '@/api/providers';
 import type { ProviderSummary, ServiceCategory } from '@/api/types';
 import { useAuth } from '@/auth/AuthContext';
+import { NotificationBell } from '@/components/notification-bell';
 import { ProviderListItem } from '@/components/provider-list-item';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -102,8 +102,10 @@ export default function CategoryBrowseScreen() {
             <View style={[styles.hero, { backgroundColor: theme.accent, paddingTop: insets.top + 20 }]}>
               <View style={styles.heroTopRow}>
                 <ThemedText style={[styles.wordmark, { color: theme.bg }]}>QUICKFIXHUB</ThemedText>
-                {/* No notifications system yet - purely decorative for now. */}
-                <Bell size={20} color={theme.bg} />
+                {/* Default badge colors (accent fill, bg ring) would be accent-on-accent here and
+                    disappear against this hero - invert to a bg-colored badge with an accent ring
+                    and accent-colored digits instead. */}
+                <NotificationBell iconColor={theme.bg} badgeColor={theme.bg} badgeTextColor={theme.accent} ringColor={theme.accent} />
               </View>
               <ThemedText style={[styles.heroTitle, { color: theme.bg }]}>Fixed{'\n'}today.</ThemedText>
               <ThemedText style={[styles.heroSubtitle, { color: theme.bg }]}>
@@ -181,11 +183,10 @@ export default function CategoryBrowseScreen() {
           <Calendar size={20} color={theme.neutral500} />
           <ThemedText style={[styles.tabLabel, { color: theme.neutral500 }]}>BOOKINGS</ThemedText>
         </Pressable>
-        {/* Chat has no screen yet - placeholder until that milestone lands. */}
-        <View style={styles.tabItem}>
+        <Pressable style={styles.tabItem} onPress={() => router.push('/(app)/chat')}>
           <MessageSquare size={20} color={theme.neutral500} />
           <ThemedText style={[styles.tabLabel, { color: theme.neutral500 }]}>CHAT</ThemedText>
-        </View>
+        </Pressable>
         <Pressable style={styles.tabItem} onPress={() => router.push('/(app)/profile')}>
           <User size={20} color={theme.neutral500} />
           <ThemedText style={[styles.tabLabel, { color: theme.neutral500 }]}>YOU</ThemedText>

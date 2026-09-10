@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { router, Stack } from 'expo-router';
-import { ChevronRight, LogOut } from 'lucide-react-native';
+import { AlertTriangle, ChevronRight, LogOut } from 'lucide-react-native';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -45,6 +45,18 @@ export default function AdminOverviewScreen() {
             <StatTile value={formatCurrency(data.totalRevenue)} label="Total revenue" />
             <StatTile value={formatCurrency(data.totalRefunded)} label="Total refunded" />
           </View>
+
+          {data.pendingVerification > 0 && (
+            <Pressable
+              style={[styles.attentionRow, { borderColor: theme.accent, backgroundColor: theme.accent100 }]}
+              onPress={() => router.push('/(app)/admin/verification')}>
+              <AlertTriangle size={16} color={theme.accent} />
+              <ThemedText type="small" style={{ color: theme.accent800, flex: 1 }}>
+                {data.pendingVerification} provider{data.pendingVerification === 1 ? '' : 's'} awaiting document review
+              </ThemedText>
+              <ChevronRight size={16} color={theme.accent} />
+            </Pressable>
+          )}
 
           <Pressable style={[styles.navRow, { borderColor: theme.divider }]} onPress={() => router.push('/(app)/admin/verification')}>
             <View>
@@ -134,5 +146,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 14,
     marginBottom: 10,
+  },
+  attentionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    padding: 12,
+    marginBottom: 16,
   },
 });

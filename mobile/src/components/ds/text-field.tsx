@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
+import { StyleSheet, TextInput, View, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
 
 import { useTheme } from '@/hooks/use-theme';
 
@@ -10,16 +10,24 @@ export type TextFieldProps = TextInputProps & {
   /** e.g. a show/hide-password eye icon, rendered inside the field on the right. */
   rightElement?: ReactNode;
   error?: string;
+  /**
+   * Style for the field's outer wrapper (the label + bordered box + error, as a unit) - this is
+   * what a caller wants for row-layout sizing (e.g. `{ flex: 1 }` to put two fields side by side).
+   * `style` (from TextInputProps) styles only the inner TextInput itself, matching normal RN
+   * convention - passing `{ flex: 1 }` there does nothing for the field's width, since the actual
+   * row-positioned box is this wrapper, not the input inside it.
+   */
+  containerStyle?: StyleProp<ViewStyle>;
 };
 
 // Matches .field + .input: label above in small caps-weight text, a bordered box with a 44px
 // touch target (the design's own .input is 36px for desktop forms; mobile screens throughout
 // the mockups use 44px explicitly), and an accent border on focus.
-export function TextField({ label, rightElement, error, style, onFocus, onBlur, ...rest }: TextFieldProps) {
+export function TextField({ label, rightElement, error, style, containerStyle, onFocus, onBlur, ...rest }: TextFieldProps) {
   const theme = useTheme();
 
   return (
-    <View>
+    <View style={containerStyle}>
       {label && (
         <ThemedText type="small" themeColor="textSecondary" style={styles.label}>
           {label}

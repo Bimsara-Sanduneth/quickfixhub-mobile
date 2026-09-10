@@ -40,6 +40,13 @@
         {
           "locationWhenInUsePermission": "QuickFixHub uses your location to show nearby providers on the map."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "QuickFixHub needs access to your photos to set a profile picture.",
+          "cameraPermission": "QuickFixHub needs access to your camera to take a profile picture."
+        }
       ]
     ],
     "experiments": {

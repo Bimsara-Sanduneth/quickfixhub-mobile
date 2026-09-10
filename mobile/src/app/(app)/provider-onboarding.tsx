@@ -1,14 +1,21 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
-import { Check, Plus } from 'lucide-react-native';
+import { Camera, Check, Plus, Upload } from 'lucide-react-native';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { listCategories, searchServices } from '@/api/catalog';
 import { extractErrorMessage } from '@/api/errors';
-import { addMyProviderService, createMyProviderProfile } from '@/api/providers';
-import type { ProviderServiceItem } from '@/api/types';
+import { updateMyPhoto } from '@/api/me';
+import { addMyProviderService, createMyProviderProfile, uploadMyDocument } from '@/api/providers';
+import {
+  DOCUMENT_TYPE_LABEL,
+  DOCUMENT_TYPES,
+  REQUIRED_DOCUMENT_TYPES,
+  type DocumentType,
+  type ProviderServiceItem,
+} from '@/api/types';
 import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/ds/button';
 import { Divider } from '@/components/ds/divider';
@@ -18,6 +25,7 @@ import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
 import { formatCurrency } from '@/utils/currency';
+import { pickAndEncodePhoto } from '@/utils/photo';
 
 const MIN_SERVICE_PRICE = 2000;
 
@@ -30,8 +38,13 @@ export default function ProviderOnboardingScreen() {
   const [city, setCity] = useState('');
   const [yearsExperience, setYearsExperience] = useState('');
   const [bio, setBio] = useState('');
+  const [photoDataUri, setPhotoDataUri] = useState<string | null>(null);
 
   const [profileId, setProfileId] = useState<string | null>(null);
+  // documentType -> the data URI last confirmed uploaded (used to gate Finish, and to show a
+  // thumbnail/checkmark for what's already submitted).
+  const [documents, setDocuments] = useState<Partial<Record<DocumentType, string>>>({});
+  const [uploadingDocType, setUploadingDocType] = useState<DocumentType | null>(null);
   const [addedServices, setAddedServices] = useState<ProviderServiceItem[]>([]);
   const [categoryId, setCategoryId] = useState<string | undefined>();
   const [serviceId, setServiceId] = useState<string | undefined>();
@@ -46,15 +59,44 @@ export default function ProviderOnboardingScreen() {
   });
 
   const createProfileMutation = useMutation({
-    mutationFn: () =>
-      createMyProviderProfile({
+    mutationFn: async () => {
+      const profile = await createMyProviderProfile({
         businessName: businessName.trim(),
         bio: bio.trim() || undefined,
         yearsExperience: yearsExperience.trim() ? Number(yearsExperience.trim()) : undefined,
         city: city.trim() || undefined,
-      }),
+      });
+      // Best-effort - a photo-upload failure shouldn't block the rest of onboarding, the
+      // business profile itself already exists at this point.
+      if (photoDataUri) {
+        await updateMyPhoto(photoDataUri).catch(() => {});
+      }
+      return profile;
+    },
     onSuccess: (profile) => setProfileId(profile.id),
   });
+
+  async function pickPhoto() {
+    const dataUri = await pickAndEncodePhoto({ aspect: [1, 1], maxWidth: 512 });
+    if (dataUri) {
+      setPhotoDataUri(dataUri);
+    }
+  }
+
+  const uploadDocumentMutation = useMutation({
+    mutationFn: ({ documentType, fileDataUri }: { documentType: DocumentType; fileDataUri: string }) =>
+      uploadMyDocument(documentType, fileDataUri),
+    onSuccess: (document) => setDocuments((prev) => ({ ...prev, [document.documentType]: document.fileDataUri })),
+    onSettled: () => setUploadingDocType(null),
+  });
+
+  async function pickDocument(documentType: DocumentType) {
+    const dataUri = await pickAndEncodePhoto({ aspect: [4, 3], maxWidth: 1000 });
+    if (dataUri) {
+      setUploadingDocType(documentType);
+      uploadDocumentMutation.mutate({ documentType, fileDataUri: dataUri });
+    }
+  }
 
   const addServiceMutation = useMutation({
     mutationFn: () =>
@@ -79,6 +121,7 @@ export default function ProviderOnboardingScreen() {
 
   const canCreateProfile = businessName.trim().length > 0;
   const canAddService = !!serviceId && Number(price) >= MIN_SERVICE_PRICE;
+  const requiredDocsSubmitted = REQUIRED_DOCUMENT_TYPES.every((type) => !!documents[type]);
 
   return (
     <ThemedView style={styles.container}>
@@ -95,6 +138,18 @@ export default function ProviderOnboardingScreen() {
 
         {!profileId ? (
           <>
+            <Pressable style={styles.photoRow} onPress={pickPhoto}>
+              <View style={[styles.photoCircle, { backgroundColor: theme.neutral200, borderColor: theme.divider }]}>
+                {photoDataUri ? (
+                  <Image source={{ uri: photoDataUri }} style={styles.photoImage} />
+                ) : (
+                  <Camera size={20} color={theme.neutral600} />
+                )}
+              </View>
+              <ThemedText type="small" style={{ color: theme.accent }}>
+                {photoDataUri ? 'Change photo' : 'Add a profile photo'}
+              </ThemedText>
+            </Pressable>
             <TextField label="Business name" value={businessName} onChangeText={setBusinessName} style={styles.fieldGap} />
             <TextField label="City" value={city} onChangeText={setCity} style={styles.fieldGap} />
             <TextField
@@ -135,6 +190,68 @@ export default function ProviderOnboardingScreen() {
                 Business profile created.
               </ThemedText>
             </View>
+
+            <Divider style={styles.sectionDivider} />
+            <ThemedText type="smallBold" style={styles.sectionLabel}>
+              Verification documents
+            </ThemedText>
+            <ThemedText type="small" themeColor="textSecondary" style={styles.docSectionHint}>
+              Customers only see a Verified badge once an admin reviews these. National ID and trade licence are required
+              before you can finish setting up.
+            </ThemedText>
+
+            {DOCUMENT_TYPES.map((type) => {
+              const uploadedUri = documents[type];
+              const isUploading = uploadDocumentMutation.isPending && uploadingDocType === type;
+              return (
+                <View key={type} style={[styles.docRow, { borderColor: theme.divider }]}>
+                  <Pressable
+                    style={[styles.docThumb, { backgroundColor: theme.neutral100, borderColor: theme.divider }]}
+                    onPress={() => pickDocument(type)}
+                    disabled={isUploading}>
+                    {isUploading ? (
+                      <ActivityIndicator size="small" color={theme.text} />
+                    ) : uploadedUri ? (
+                      <Image source={{ uri: uploadedUri }} style={styles.docThumbImage} />
+                    ) : (
+                      <Upload size={18} color={theme.neutral500} />
+                    )}
+                  </Pressable>
+                  <View style={styles.docInfo}>
+                    <View style={styles.docLabelRow}>
+                      <ThemedText type="smallBold">{DOCUMENT_TYPE_LABEL[type]}</ThemedText>
+                      {REQUIRED_DOCUMENT_TYPES.includes(type) && (
+                        <ThemedText type="small" themeColor="textSecondary" style={styles.requiredTag}>
+                          Required
+                        </ThemedText>
+                      )}
+                    </View>
+                    {uploadedUri ? (
+                      <View style={styles.docUploadedRow}>
+                        <Check size={12} color={theme.accent} strokeWidth={3} />
+                        <ThemedText type="small" style={{ color: theme.accent }}>
+                          Uploaded
+                        </ThemedText>
+                      </View>
+                    ) : (
+                      <ThemedText type="small" themeColor="textSecondary">
+                        Not uploaded yet
+                      </ThemedText>
+                    )}
+                    <Pressable onPress={() => pickDocument(type)} disabled={isUploading} hitSlop={4}>
+                      <ThemedText type="small" style={{ color: theme.accent, marginTop: 2 }}>
+                        {uploadedUri ? 'Replace' : 'Upload'}
+                      </ThemedText>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })}
+            {uploadDocumentMutation.isError && (
+              <ThemedText type="small" style={{ color: theme.accent, marginBottom: 8 }}>
+                {extractErrorMessage(uploadDocumentMutation.error)}
+              </ThemedText>
+            )}
 
             <Divider style={styles.sectionDivider} />
             <ThemedText type="smallBold" style={styles.sectionLabel}>
@@ -199,14 +316,14 @@ export default function ProviderOnboardingScreen() {
                     keyboardType="decimal-pad"
                     value={price}
                     onChangeText={setPrice}
-                    style={styles.priceField}
+                    containerStyle={styles.priceField}
                   />
                   <TextField
                     label="Duration (min)"
                     keyboardType="number-pad"
                     value={duration}
                     onChangeText={setDuration}
-                    style={styles.priceField}
+                    containerStyle={styles.priceField}
                   />
                 </View>
                 <ThemedText type="small" themeColor="textSecondary" style={styles.priceHint}>
@@ -236,7 +353,17 @@ export default function ProviderOnboardingScreen() {
 
       {profileId && (
         <View style={[styles.footer, { paddingBottom: insets.bottom + 24, borderTopColor: theme.divider }]}>
-          <Button label={addedServices.length > 0 ? 'Finish' : 'Finish without a service'} onPress={finish} block />
+          {!requiredDocsSubmitted && (
+            <ThemedText type="small" style={{ color: theme.accent, marginBottom: 8 }}>
+              Upload your National ID and trade licence above to finish setting up.
+            </ThemedText>
+          )}
+          <Button
+            label={addedServices.length > 0 ? 'Finish' : 'Finish without a service'}
+            onPress={finish}
+            disabled={!requiredDocsSubmitted}
+            block
+          />
         </View>
       )}
     </ThemedView>
@@ -269,6 +396,24 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 22,
   },
+  photoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 20,
+  },
+  photoCircle: {
+    width: 56,
+    height: 56,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  photoImage: {
+    width: '100%',
+    height: '100%',
+  },
   fieldGap: {
     marginBottom: 14,
   },
@@ -294,6 +439,47 @@ const styles = StyleSheet.create({
   },
   sectionLoading: {
     marginBottom: 12,
+  },
+  docSectionHint: {
+    lineHeight: 17,
+    marginBottom: 14,
+  },
+  docRow: {
+    flexDirection: 'row',
+    gap: 12,
+    borderWidth: 1,
+    padding: 10,
+    marginBottom: 10,
+  },
+  docThumb: {
+    width: 52,
+    height: 52,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  docThumbImage: {
+    width: '100%',
+    height: '100%',
+  },
+  docInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  docLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+  },
+  requiredTag: {
+    fontSize: 10.5,
+    fontStyle: 'italic',
+  },
+  docUploadedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   serviceRow: {
     flexDirection: 'row',

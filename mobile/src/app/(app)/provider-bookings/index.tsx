@@ -1,23 +1,25 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { router, Stack } from 'expo-router';
-import { ArrowLeft, MessageSquare, Settings } from 'lucide-react-native';
+import { isAxiosError } from 'axios';
+import { Redirect, router, Stack } from 'expo-router';
+import { AlertTriangle, ArrowLeft, MessageSquare, Settings } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { acceptBooking, completeBooking, declineBooking, listProviderBookings, startJobBooking, startTravelBooking } from '@/api/bookings';
 import { extractErrorMessage } from '@/api/errors';
-import { getMyProviderProfile } from '@/api/providers';
+import { getMyProviderProfile, getMyVerification } from '@/api/providers';
 import type { Booking } from '@/api/types';
 import { Button } from '@/components/ds/button';
 import { Dialog } from '@/components/ds/dialog';
 import { Divider } from '@/components/ds/divider';
-import { Tag } from '@/components/ds/tag';
+import { Tag, type TagVariant } from '@/components/ds/tag';
+import { NotificationBell } from '@/components/notification-bell';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
-import { minutesLeft, STATUS_LABEL, STATUS_TAG_VARIANT } from '@/utils/booking';
-import { formatCurrency } from '@/utils/currency';
+import { countdownClock, STATUS_LABEL, STATUS_TAG_VARIANT } from '@/utils/booking';
+import { formatCurrency, formatCurrencyCompact } from '@/utils/currency';
 
 // A booking the provider actually chose to accept or turn down - REQUESTED (still undecided) and
 // CANCELLED (the customer's call, not the provider's) don't count either way.
@@ -47,6 +49,14 @@ function startOfWeek(): Date {
   return monday;
 }
 
+export type ScheduleLabel = 'DONE' | 'NEXT' | 'SCHEDULED';
+
+const SCHEDULE_LABEL_VARIANT: Record<ScheduleLabel, TagVariant> = {
+  DONE: 'neutral',
+  NEXT: 'solid',
+  SCHEDULED: 'outline',
+};
+
 function computeStats(bookings: Booking[]) {
   const weekStart = startOfWeek();
   const earningsThisWeek = bookings
@@ -57,11 +67,29 @@ function computeStats(bookings: Booking[]) {
   const accepted = resolved.filter((b) => b.status !== 'DECLINED');
   const acceptRate = resolved.length > 0 ? accepted.length / resolved.length : null;
 
-  const todaysSchedule = bookings
-    .filter((b) => isToday(b.scheduledAt) && b.status !== 'DECLINED' && b.status !== 'CANCELLED')
+  const pendingCount = bookings.filter((b) => b.status === 'REQUESTED').length;
+
+  // REQUESTED isn't part of "today's schedule" - an undecided request lives in the requests
+  // list above until it's accepted or declined, not mixed in with the day's confirmed jobs.
+  const todaysJobs = bookings
+    .filter((b) => isToday(b.scheduledAt) && b.status !== 'REQUESTED' && b.status !== 'DECLINED' && b.status !== 'CANCELLED')
     .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
 
-  return { earningsThisWeek, acceptRate, todaysSchedule };
+  // The first not-yet-done job (chronologically) is "NEXT" - everything after it is merely
+  // "SCHEDULED", matching the design's at-a-glance schedule copy.
+  const firstUpcomingIndex = todaysJobs.findIndex((b) => b.status !== 'COMPLETED');
+  const todaysSchedule: { booking: Booking; label: ScheduleLabel }[] = todaysJobs.map((b, i) => ({
+    booking: b,
+    label: b.status === 'COMPLETED' ? 'DONE' : i === firstUpcomingIndex ? 'NEXT' : 'SCHEDULED',
+  }));
+
+  // Confirmed jobs beyond today - "New requests" below only holds undecided REQUESTED bookings,
+  // so a job already accepted for a future date needs somewhere else to stay visible.
+  const upcomingJobs = bookings
+    .filter((b) => !isToday(b.scheduledAt) && (b.status === 'ACCEPTED' || b.status === 'EN_ROUTE' || b.status === 'IN_PROGRESS'))
+    .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
+
+  return { earningsThisWeek, acceptRate, pendingCount, todaysSchedule, upcomingJobs };
 }
 
 export default function ProviderBookingsScreen() {
@@ -76,10 +104,12 @@ export default function ProviderBookingsScreen() {
     queryFn: listProviderBookings,
   });
   const profile = useQuery({ queryKey: ['me', 'provider-profile'], queryFn: getMyProviderProfile });
+  const verification = useQuery({ queryKey: ['me', 'verification'], queryFn: getMyVerification });
 
-  // Keeps the per-row accept-window countdown live without a per-row timer each.
+  // Keeps the per-row accept-window countdown clock ("27:14") live, one shared timer rather
+  // than one per row.
   useEffect(() => {
-    const id = setInterval(() => forceTick((n) => n + 1), 30_000);
+    const id = setInterval(() => forceTick((n) => n + 1), 1_000);
     return () => clearInterval(id);
   }, []);
 
@@ -110,6 +140,14 @@ export default function ProviderBookingsScreen() {
     },
   });
 
+  // A PROVIDER-role account with no provider_profile row yet (e.g. they exited onboarding
+  // before finishing it) previously just hit a dead-end "No provider profile yet" error here -
+  // send them back to finish setup instead.
+  const needsOnboarding = isAxiosError(error) && error.response?.status === 404;
+  if (needsOnboarding) {
+    return <Redirect href="/(app)/provider-onboarding" />;
+  }
+
   const stats = data ? computeStats(data) : null;
 
   function renderBooking({ item }: { item: Booking }) {
@@ -132,12 +170,19 @@ export default function ProviderBookingsScreen() {
         )}
         {item.status === 'REQUESTED' && item.expiresAt && (
           <ThemedText type="small" style={[styles.countdown, { color: theme.accent }]}>
-            {minutesLeft(item.expiresAt)} min left to respond
+            {countdownClock(item.expiresAt)} left to respond
           </ThemedText>
         )}
         <View style={styles.rowBottom}>
           <View style={styles.rowActions}>
-            <ThemedText style={styles.price}>{formatCurrency(item.price)}</ThemedText>
+            <View>
+              {item.status === 'REQUESTED' && (
+                <ThemedText type="small" themeColor="textSecondary" style={styles.payoutLabel}>
+                  Estimated payout
+                </ThemedText>
+              )}
+              <ThemedText style={styles.price}>{formatCurrency(item.price)}</ThemedText>
+            </View>
             <Pressable onPress={() => openChat(item)} hitSlop={6}>
               <MessageSquare size={16} color={theme.text} />
             </Pressable>
@@ -194,11 +239,27 @@ export default function ProviderBookingsScreen() {
           <ArrowLeft size={20} color={theme.text} />
         </Pressable>
         <ThemedText style={styles.headerTitle}>DASHBOARD</ThemedText>
-        <Pressable onPress={() => router.push('/(app)/provider-availability')} hitSlop={8}>
-          <Settings size={20} color={theme.text} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <NotificationBell />
+          <Pressable onPress={() => router.push('/(app)/provider-availability')} hitSlop={8}>
+            <Settings size={20} color={theme.text} />
+          </Pressable>
+        </View>
       </View>
       <Divider style={styles.headerDivider} />
+
+      {verification.data && verification.data.status !== 'APPROVED' && (
+        <Pressable
+          style={[styles.verificationBanner, { borderColor: theme.accent, backgroundColor: theme.accent100 }]}
+          onPress={() => router.push('/(app)/provider-verification')}>
+          <AlertTriangle size={16} color={theme.accent} />
+          <ThemedText type="small" style={{ color: theme.accent800, flex: 1 }}>
+            {verification.data.status === 'REJECTED'
+              ? 'Your verification needs attention - tap to review.'
+              : 'Upload your verification documents to get a Verified badge.'}
+          </ThemedText>
+        </Pressable>
+      )}
 
       {isPending ? (
         <ActivityIndicator style={styles.loading} />
@@ -213,7 +274,7 @@ export default function ProviderBookingsScreen() {
         </View>
       ) : (
         <FlatList
-          data={data}
+          data={data?.filter((b) => b.status === 'REQUESTED')}
           keyExtractor={(item) => item.id}
           refreshing={isRefetching}
           onRefresh={refetch}
@@ -222,9 +283,9 @@ export default function ProviderBookingsScreen() {
             <>
               <View style={[styles.statsGrid, { backgroundColor: theme.divider }]}>
                 <View style={[styles.statTile, { backgroundColor: theme.bg }]}>
-                  <ThemedText style={styles.statValue}>{formatCurrency(stats?.earningsThisWeek ?? 0)}</ThemedText>
+                  <ThemedText style={styles.statValue}>{formatCurrencyCompact(stats?.earningsThisWeek ?? 0)}</ThemedText>
                   <ThemedText type="small" themeColor="textSecondary" style={styles.statLabel}>
-                    Earned this week
+                    This week
                   </ThemedText>
                 </View>
                 <View style={[styles.statTile, { backgroundColor: theme.bg }]}>
@@ -251,7 +312,7 @@ export default function ProviderBookingsScreen() {
                     Today&rsquo;s schedule
                   </ThemedText>
                   <View style={styles.scheduleList}>
-                    {stats.todaysSchedule.map((b) => (
+                    {stats.todaysSchedule.map(({ booking: b, label }) => (
                       <Pressable
                         key={b.id}
                         style={[styles.scheduleRow, { borderColor: theme.divider }]}
@@ -265,7 +326,7 @@ export default function ProviderBookingsScreen() {
                             {b.serviceName}
                           </ThemedText>
                         </View>
-                        <Tag label={STATUS_LABEL[b.status]} variant={STATUS_TAG_VARIANT[b.status]} />
+                        <Tag label={label} variant={SCHEDULE_LABEL_VARIANT[label]} />
                       </Pressable>
                     ))}
                   </View>
@@ -273,17 +334,44 @@ export default function ProviderBookingsScreen() {
                 </>
               )}
 
-              <ThemedText type="smallBold" style={styles.sectionLabel}>
-                Booking requests
-              </ThemedText>
+              <View style={styles.sectionHeaderRow}>
+                <ThemedText type="smallBold">New requests</ThemedText>
+                {!!stats?.pendingCount && <Tag label={`${stats.pendingCount} WAITING`} variant="solid" />}
+              </View>
             </>
           }
           ListEmptyComponent={
             <ThemedText type="small" themeColor="textSecondary" style={styles.emptyText}>
-              No booking requests yet.
+              No new requests right now.
             </ThemedText>
           }
           renderItem={renderBooking}
+          ListFooterComponent={
+            stats && stats.upcomingJobs.length > 0 ? (
+              <>
+                <Divider style={styles.sectionDivider} />
+                <ThemedText type="smallBold" style={styles.sectionLabel}>
+                  Upcoming jobs
+                </ThemedText>
+                <View style={styles.scheduleList}>
+                  {stats.upcomingJobs.map((b) => (
+                    <Pressable key={b.id} style={[styles.scheduleRow, { borderColor: theme.divider }]} onPress={() => openDetail(b)}>
+                      <View style={{ flex: 1 }}>
+                        <ThemedText type="small" themeColor="textSecondary">
+                          {formatSchedule(b.scheduledAt)}
+                        </ThemedText>
+                        <ThemedText type="small">{b.customerName}</ThemedText>
+                        <ThemedText type="small" themeColor="textSecondary">
+                          {b.serviceName}
+                        </ThemedText>
+                      </View>
+                      <Tag label={STATUS_LABEL[b.status]} variant={STATUS_TAG_VARIANT[b.status]} />
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            ) : null
+          }
         />
       )}
 
@@ -322,7 +410,21 @@ const styles = StyleSheet.create({
     fontFamily: 'Archivo_800ExtraBold',
     fontSize: 15,
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 18,
+  },
   headerDivider: {
+    marginTop: 16,
+  },
+  verificationBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    padding: 12,
+    marginHorizontal: 20,
     marginTop: 16,
   },
   loading: {
@@ -358,6 +460,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
   sectionLabel: {
+    marginBottom: 10,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: 10,
   },
   scheduleList: {
@@ -416,6 +524,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
+  },
+  payoutLabel: {
+    fontSize: 10,
   },
   price: {
     fontFamily: 'Archivo_800ExtraBold',

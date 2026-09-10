@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Image, Pressable, StyleSheet, View } from 'react-native';
 
 import type { ProviderSummary } from '@/api/types';
 import { useTheme } from '@/hooks/use-theme';
@@ -20,7 +20,9 @@ export function ProviderListItem({ provider, onPress }: ProviderListItemProps) {
 
   return (
     <Pressable style={[styles.row, { borderColor: theme.divider }]} onPress={onPress}>
-      <View style={[styles.photo, { backgroundColor: theme.neutral200 }]} />
+      <View style={[styles.photo, { backgroundColor: theme.neutral200 }]}>
+        {provider.photoDataUri && <Image source={{ uri: provider.photoDataUri }} style={styles.photoImage} />}
+      </View>
       <View style={{ flex: 1 }}>
         <ThemedText style={styles.name}>{provider.businessName}</ThemedText>
         <ThemedText type="small" themeColor="textSecondary" style={styles.meta}>
@@ -57,6 +59,11 @@ const styles = StyleSheet.create({
   photo: {
     width: 72,
     height: 72,
+    overflow: 'hidden',
+  },
+  photoImage: {
+    width: '100%',
+    height: '100%',
   },
   name: {
     fontFamily: 'Archivo_800ExtraBold',

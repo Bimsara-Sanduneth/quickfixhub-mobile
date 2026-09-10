@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { router, Stack, useLocalSearchParams } from 'expo-router';
-import { ArrowLeft, Check, MessageSquare } from 'lucide-react-native';
+import { ArrowLeft, Check, MessageSquare, Phone } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { listMyBookings } from '@/api/bookings';
@@ -261,6 +261,13 @@ export default function BookingDetailScreen() {
       </ScrollView>
 
       <View style={[styles.footer, { borderTopColor: theme.divider, paddingBottom: insets.bottom + 16 }]}>
+        {booking.providerPhone && (
+          <Pressable
+            style={[styles.callButton, { borderColor: theme.divider }]}
+            onPress={() => Linking.openURL(`tel:${booking!.providerPhone}`)}>
+            <Phone size={17} color={theme.text} />
+          </Pressable>
+        )}
         <Pressable style={[styles.chatButton, { borderColor: theme.divider }]} onPress={openChat}>
           <MessageSquare size={17} color={theme.text} />
           <ThemedText type="smallBold">Message</ThemedText>
@@ -408,6 +415,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 8,
     borderWidth: 1,
+    paddingVertical: 13,
+  },
+  callButton: {
+    width: 48,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
     paddingVertical: 13,
   },
   cancelLink: {

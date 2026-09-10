@@ -5,6 +5,7 @@ import com.quickfixhub.backend.booking.BookingRepository;
 import com.quickfixhub.backend.booking.BookingStatus;
 import com.quickfixhub.backend.payment.PaymentRepository;
 import com.quickfixhub.backend.provider.ProviderProfileRepository;
+import com.quickfixhub.backend.provider.VerificationStatus;
 import com.quickfixhub.backend.user.Role;
 import com.quickfixhub.backend.user.UserRepository;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -38,7 +39,9 @@ public class AdminOverviewController {
 				userRepository.countByRole(Role.CUSTOMER),
 				userRepository.countByRole(Role.PROVIDER),
 				providerProfileRepository.countByVerified(true),
-				providerProfileRepository.countByVerified(false),
+				// PENDING only, not "everything unverified" - a REJECTED provider isn't waiting on
+				// anything, they've already been decided on and are free to resubmit.
+				providerProfileRepository.countByVerificationStatus(VerificationStatus.PENDING),
 				bookingRepository.count(),
 				bookingRepository.countByStatus(BookingStatus.COMPLETED),
 				paymentRepository.sumAmount(),

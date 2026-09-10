@@ -1,28 +1,42 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, Stack } from 'expo-router';
-import { ArrowLeft, Bookmark, LogOut, Plus } from 'lucide-react-native';
+import { ArrowLeft, Bookmark, Camera, LogOut, Plus, RefreshCw } from 'lucide-react-native';
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { createAddress, listAddresses } from '@/api/addresses';
 import { listMyBookings } from '@/api/bookings';
 import { extractErrorMessage } from '@/api/errors';
-import { getCurrentUser } from '@/api/me';
+import { deleteMyCoverPhoto, deleteMyPhoto, getCurrentUser, updateMyCoverPhoto, updateMyPhoto } from '@/api/me';
 import { listSavedProviders, unsaveProvider } from '@/api/providers';
 import type { ProviderSummary } from '@/api/types';
 import { useAuth } from '@/auth/AuthContext';
 import { Button } from '@/components/ds/button';
 import { Divider } from '@/components/ds/divider';
+import { Tag } from '@/components/ds/tag';
 import { TextField } from '@/components/ds/text-field';
 import { StarRating } from '@/components/star-rating';
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
 import { useTheme } from '@/hooks/use-theme';
+import { resetOnboarding } from '@/onboarding/onboardingStorage';
+import { THEME_MODE_LABEL, THEME_MODES, useThemeMode } from '@/theme/theme-mode';
+import { pickAndEncodePhoto } from '@/utils/photo';
+
+// No photo upload exists anywhere in the app - this mirrors the same static-avatar-box pattern
+// already used on the provider detail screen, just with initials rather than a blank box.
+function initials(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/);
+  const first = parts[0]?.[0] ?? '';
+  const last = parts.length > 1 ? parts[parts.length - 1][0] : '';
+  return (first + last).toUpperCase();
+}
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const theme = useTheme();
+  const { mode, setMode } = useThemeMode();
   const { logout } = useAuth();
   const queryClient = useQueryClient();
   const [addingAddress, setAddingAddress] = useState(false);
@@ -52,12 +66,51 @@ export default function ProfileScreen() {
     },
   });
 
+  const photoMutation = useMutation({
+    mutationFn: updateMyPhoto,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['me'] }),
+  });
+  const removePhotoMutation = useMutation({
+    mutationFn: deleteMyPhoto,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['me'] }),
+  });
+  const coverPhotoMutation = useMutation({
+    mutationFn: updateMyCoverPhoto,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['me'] }),
+  });
+  const removeCoverPhotoMutation = useMutation({
+    mutationFn: deleteMyCoverPhoto,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['me'] }),
+  });
+
+  async function pickPhoto() {
+    const dataUri = await pickAndEncodePhoto({ aspect: [1, 1], maxWidth: 512 });
+    if (dataUri) {
+      photoMutation.mutate(dataUri);
+    }
+  }
+
+  async function pickCoverPhoto() {
+    const dataUri = await pickAndEncodePhoto({ aspect: [3, 1], maxWidth: 1200 });
+    if (dataUri) {
+      coverPhotoMutation.mutate(dataUri);
+    }
+  }
+
   function openProvider(provider: ProviderSummary) {
     router.push({ pathname: '/(app)/providers/[providerId]', params: { providerId: provider.id } });
   }
 
   async function handleLogout() {
     setLoggingOut(true);
+    await logout();
+  }
+
+  // Dev-only: wipe the "seen onboarding" flag and sign out, so the app relaunches into the
+  // "Get started" intro slides instead of the login screen. No-op in a production build.
+  async function handleResetOnboarding() {
+    setLoggingOut(true);
+    await resetOnboarding();
     await logout();
   }
 
@@ -75,12 +128,68 @@ export default function ProfileScreen() {
 
       <ScrollView contentContainerStyle={styles.body}>
         {me.data && (
-          <>
-            <ThemedText style={styles.name}>{me.data.fullName}</ThemedText>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.email}>
-              {me.data.email}
+          <Pressable
+            style={[styles.coverPhoto, { backgroundColor: theme.neutral200 }]}
+            onPress={pickCoverPhoto}
+            disabled={coverPhotoMutation.isPending}>
+            {me.data.coverPhotoDataUri && <Image source={{ uri: me.data.coverPhotoDataUri }} style={styles.coverPhotoImage} />}
+            <View style={[styles.coverPhotoBadge, { backgroundColor: theme.accent, borderColor: theme.bg }]}>
+              {coverPhotoMutation.isPending ? <ActivityIndicator size={10} color={theme.bg} /> : <Camera size={11} color={theme.bg} />}
+            </View>
+            {!me.data.coverPhotoDataUri && (
+              <ThemedText type="small" style={[styles.coverPhotoHint, { color: theme.neutral600 }]}>
+                Add a cover photo
+              </ThemedText>
+            )}
+          </Pressable>
+        )}
+        {me.data?.coverPhotoDataUri && (
+          <Pressable onPress={() => removeCoverPhotoMutation.mutate()} disabled={removeCoverPhotoMutation.isPending} hitSlop={4}>
+            <ThemedText type="small" style={{ color: theme.accent, marginBottom: 16 }}>
+              Remove cover photo
             </ThemedText>
-          </>
+          </Pressable>
+        )}
+        {coverPhotoMutation.isError && (
+          <ThemedText type="small" style={{ color: theme.accent, marginBottom: 12 }}>
+            {extractErrorMessage(coverPhotoMutation.error)}
+          </ThemedText>
+        )}
+
+        {me.data && (
+          <View style={styles.profileHeader}>
+            <Pressable
+              style={[styles.avatar, { backgroundColor: theme.neutral200, borderColor: theme.divider }]}
+              onPress={pickPhoto}
+              disabled={photoMutation.isPending}>
+              {me.data.photoDataUri ? (
+                <Image source={{ uri: me.data.photoDataUri }} style={styles.avatarImage} />
+              ) : (
+                <ThemedText style={styles.avatarInitials}>{initials(me.data.fullName)}</ThemedText>
+              )}
+              <View style={[styles.avatarEditBadge, { backgroundColor: theme.accent, borderColor: theme.bg }]}>
+                {photoMutation.isPending ? <ActivityIndicator size={10} color={theme.bg} /> : <Camera size={11} color={theme.bg} />}
+              </View>
+            </Pressable>
+            <View style={styles.profileHeaderText}>
+              <ThemedText style={styles.name}>{me.data.fullName}</ThemedText>
+              <ThemedText type="small" themeColor="textSecondary">
+                {me.data.email}
+              </ThemedText>
+              {me.data.photoDataUri && (
+                <Pressable onPress={() => removePhotoMutation.mutate()} disabled={removePhotoMutation.isPending} hitSlop={4}>
+                  <ThemedText type="small" style={{ color: theme.accent, marginTop: 4 }}>
+                    Remove photo
+                  </ThemedText>
+                </Pressable>
+              )}
+            </View>
+          </View>
+        )}
+        {photoMutation.isError && (
+          <ThemedText type="small" style={{ color: theme.accent, marginBottom: 12 }}>
+            {extractErrorMessage(photoMutation.error)}
+          </ThemedText>
         )}
 
         <View style={[styles.statsGrid, { backgroundColor: theme.divider }]}>
@@ -189,12 +298,34 @@ export default function ProfileScreen() {
 
         <Divider style={styles.sectionDivider} />
 
+        <ThemedText type="smallBold" style={styles.sectionLabel}>
+          Appearance
+        </ThemedText>
+        <View style={styles.themeRow}>
+          {THEME_MODES.map((m) => (
+            <Pressable key={m} onPress={() => setMode(m)}>
+              <Tag label={THEME_MODE_LABEL[m]} variant={mode === m ? 'solid' : 'outline'} />
+            </Pressable>
+          ))}
+        </View>
+
+        <Divider style={styles.sectionDivider} />
+
         <Pressable style={styles.logoutRow} onPress={handleLogout} disabled={loggingOut}>
           <LogOut size={16} color={theme.accent} />
           <ThemedText type="smallBold" style={{ color: theme.accent }}>
             Log out
           </ThemedText>
         </Pressable>
+
+        {__DEV__ && (
+          <Pressable style={styles.logoutRow} onPress={handleResetOnboarding} disabled={loggingOut}>
+            <RefreshCw size={16} color={theme.textSecondary} />
+            <ThemedText type="smallBold" themeColor="textSecondary">
+              Reset onboarding & sign out (dev)
+            </ThemedText>
+          </Pressable>
+        )}
       </ScrollView>
     </ThemedView>
   );
@@ -222,13 +353,70 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 40,
   },
-  name: {
+  coverPhoto: {
+    height: 120,
+    marginBottom: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coverPhotoImage: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  coverPhotoBadge: {
+    position: 'absolute',
+    right: 8,
+    bottom: 8,
+    width: 22,
+    height: 22,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  coverPhotoHint: {
+    fontSize: 12,
+  },
+  profileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginBottom: 24,
+  },
+  avatar: {
+    width: 64,
+    height: 64,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+  },
+  avatarInitials: {
     fontFamily: 'Archivo_800ExtraBold',
     fontSize: 22,
   },
-  email: {
-    marginTop: 2,
-    marginBottom: 18,
+  avatarEditBadge: {
+    position: 'absolute',
+    right: -4,
+    bottom: -4,
+    width: 20,
+    height: 20,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileHeaderText: {
+    flex: 1,
+  },
+  name: {
+    fontFamily: 'Archivo_800ExtraBold',
+    fontSize: 20,
+    marginBottom: 2,
   },
   statsGrid: {
     flexDirection: 'row',
@@ -297,6 +485,10 @@ const styles = StyleSheet.create({
   addAddressActions: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    gap: 8,
+  },
+  themeRow: {
+    flexDirection: 'row',
     gap: 8,
   },
   logoutRow: {
