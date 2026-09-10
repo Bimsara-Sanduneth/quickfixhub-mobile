@@ -190,7 +190,7 @@ Seeded on first run; password `Password123!`.
 | Role | Email |
 | --- | --- |
 | Admin | `admin@quickfixhub.local` |
-| Provider | `pipes.pro@example.com` · `sparkle.clean@example.com` |
+| Provider | register your own from the app |
 | Customer | register your own from the app |
 
 ---
